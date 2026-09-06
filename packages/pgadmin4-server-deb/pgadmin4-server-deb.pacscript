@@ -1,0 +1,16 @@
+pkgname="pgadmin4-server-deb"
+repology=("project: pgadmin4-server")
+arch=('amd64')
+gives="pgadmin4-server"
+pkgver="9.5"
+source=("https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/oracular/dists/pgadmin4/main/binary-amd64/pgadmin4-server_${pkgver}_amd64.deb")
+source_noble=("https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/noble/dists/pgadmin4/main/binary-amd64/pgadmin4-server_${pkgver}_amd64.deb")
+source_jammy=("https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/jammy/dists/pgadmin4/main/binary-amd64/pgadmin4-server_${pkgver}_amd64.deb")
+source_bookworm=("https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/bookworm/dists/pgadmin4/main/binary-amd64/pgadmin4-server_${pkgver}_amd64.deb")
+pkgdesc="Core server package for pgAdmin"
+sha256sums=("512307389ed6f780ce292bbcf651e88af56a8fd122c039e6f44d859727410a47")
+sha256sums_noble=("1f67f157ff9cd4fd5c6e8e7aa2cccf30b3e79d50e5cf2c50fe9dce9258ff592f")
+sha256sums_jammy=("fc302407b5c116a59b2cf2028a8e65249e6603a147e5c7081abe9611b56030c5")
+sha256sums_bookworm=("ba577f415a211845f5d935129ee636d4eeb70843f3ca5d155701bd6dc84c78c1")
+maintainer=("villamorrd <villamorrd@students.nu-moa.edu.ph>")
+compatible=("debian:bookworm" "ubuntu:jammy" "ubuntu:noble" "ubuntu:oracular" "ubuntu:devel")

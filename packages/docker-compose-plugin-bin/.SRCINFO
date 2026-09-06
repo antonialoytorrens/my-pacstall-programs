@@ -1,0 +1,16 @@
+pkgbase = docker-compose-plugin-bin
+	gives = docker-compose-plugin
+	pkgver = 5.2.0
+	pkgdesc = Docker Compose cli plugin
+	url = https://github.com/docker/compose
+	arch = amd64
+	arch = arm64
+	replaces = docker-compose-plugin
+	maintainer = Oren Klopfer <oren@taumoda.com>
+	repology = project: docker-compose
+	source_amd64 = https://github.com/docker/compose/releases/download/v5.2.0/docker-compose-linux-x86_64
+	sha256sums_amd64 = 018f9612ecabc5f2d7aaa53d6f5f44453a87611e2d72c8ef84d7b1eca070e719
+	source_arm64 = https://github.com/docker/compose/releases/download/v5.2.0/docker-compose-linux-aarch64
+	sha256sums_arm64 = 739de570a0adf5eab12830db980f549fb5f44ad6b266e1e43e20f6f9df7cbcca
+
+pkgname = docker-compose-plugin-bin

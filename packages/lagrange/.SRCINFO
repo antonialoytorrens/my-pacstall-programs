@@ -1,0 +1,21 @@
+pkgbase = lagrange
+	pkgver = 1.20.8
+	pkgdesc = Beautiful Gemini Client
+	arch = any
+	makedepends = git
+	makedepends = cmake
+	makedepends = libsdl2-dev
+	makedepends = libssl-dev
+	makedepends = libpcre3-dev | libpcre2-dev
+	makedepends = zlib1g-dev
+	makedepends = libunistring-dev
+	makedepends = libmpg123-dev
+	makedepends = zip
+	makedepends = libharfbuzz-dev
+	makedepends = libfribidi-dev
+	license = BSD-2-Clause
+	repology = project: lagrange
+	source = @lagrange~1.20.8::https://git.skyjake.fi/gemini/lagrange/releases/download/v1.20.8/lagrange-1.20.8.tar.gz
+	sha256sums = eff268bf2f9e1b68b59d37172c06226e61868dcde792bdfc44e90987dc46c6c1
+
+pkgname = lagrange

@@ -1,0 +1,237 @@
+name: tests
+
+on: pull_request
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        OS: ["ubuntu:latest", "ubuntu:devel", "ubuntu:rolling", "debian:stable", "debian:testing", "debian:unstable"]
+        PACSTALL_VERSION: ["master", "develop"]
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: ${{ matrix.OS }}
+      options: --privileged
+      env:
+        TERM: xterm
+        shell: bash
+        USER: dio
+        LOGNAME: dio
+        SUDO_USER: dio
+        DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: changes
+        uses: dorny/paths-filter@v4
+        with:
+          list-files: shell
+          filters: |
+            pacscripts:
+              - 'packages/*/*.pacscript'
+
+      - name: Install system utilities
+        if: steps.changes.outputs.pacscripts == 'true'
+        run: |
+          dpkg --add-architecture i386
+          dpkg --add-architecture arm64
+
+          if [[ $(. /etc/os-release; echo "$ID") == ubuntu ]]; then
+            . /etc/os-release
+
+            cat > /etc/apt/sources.list.d/ubuntu.sources <<EOF
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: ${VERSION_CODENAME} ${VERSION_CODENAME}-updates ${VERSION_CODENAME}-backports
+          Components: main universe restricted multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          Architectures-Remove: amd64 i386
+
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: ${VERSION_CODENAME}-security
+          Components: main universe restricted multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          Architectures-Remove: amd64 i386
+
+          Types: deb
+          URIs: http://archive.ubuntu.com/ubuntu/
+          Suites: ${VERSION_CODENAME} ${VERSION_CODENAME}-updates ${VERSION_CODENAME}-backports
+          Components: main universe restricted multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          Architectures-Remove: arm64
+
+          Types: deb
+          URIs: http://security.ubuntu.com/ubuntu/
+          Suites: ${VERSION_CODENAME}-security
+          Components: main universe restricted multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          Architectures-Remove: arm64
+          EOF
+
+            rm -f /etc/apt/sources.list
+          fi
+
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            apt-utils \
+            bash \
+            ca-certificates \
+            curl \
+            desktop-file-utils \
+            git \
+            iputils-ping \
+            keyboard-configuration \
+            lsb-release \
+            sudo \
+            wget
+
+          ln -fs /usr/share/zoneinfo/Africa/Libreville /etc/localtime
+
+      - name: Create test user
+        if: steps.changes.outputs.pacscripts == 'true'
+        run: |
+          useradd \
+            --create-home \
+            --home-dir /home/dio \
+            --shell /bin/bash \
+            --gid root \
+            --groups sudo \
+            --uid 1001 \
+            dio
+
+          sed -i \
+            's/^%sudo.*/%sudo ALL=(ALL) NOPASSWD:ALL/' \
+            /etc/sudoers
+
+          chmod -R 777 /tmp
+
+      - name: Install Pacstall
+        if: steps.changes.outputs.pacscripts == 'true'
+        shell: sudo -E -u dio bash {0}
+        run: |
+          curl -fsSL 'https://pacstall.dev/q/install?dnt' \
+            -o pacstall-install.sh
+
+          chmod +x pacstall-install.sh
+
+          printf 'N\n' | sudo ./pacstall-install.sh
+
+          rm pacstall-install.sh
+
+          sudo sed -i \
+            's/ignore_stack=false/ignore_stack=true/' \
+            /usr/bin/pacstall
+
+      - name: Set Pacstall Version
+        if: steps.changes.outputs.pacscripts == 'true'
+        env:
+          PACSTALL_VERSION: ${{ matrix.PACSTALL_VERSION }}
+        shell: sudo -E -u dio bash {0}
+        run: |
+          pacstall -U pacstall "${PACSTALL_VERSION}"
+
+      - name: Installing Packages
+        if: steps.changes.outputs.pacscripts == 'true'
+        shell: sudo -E -u dio bash {0}
+        env:
+          PRNUM: ${{ github.event.pull_request.number }}
+          GITHUB_ACTIONS: true
+          METADIR: /var/lib/pacstall/metadata
+        run: |
+          for changed_file in ${{ steps.changes.outputs.pacscripts_files }}; do
+            [[ ${changed_file} == *".pacscript" ]] || continue
+
+            echo "::group::${changed_file}"
+
+            package_name="$(basename "${changed_file%.pacscript}")"
+
+            if [[ -f "${METADIR}/${package_name}" ]]; then
+              echo "Package ${package_name} has already been installed" >&2
+              echo "::endgroup::"
+              continue
+            fi
+
+            echo "Running 'pacstall -Qa' for ${package_name}..."
+            echo "pacstall -Qa ${package_name}#${PRNUM}@github:${GITHUB_REPOSITORY}"
+
+            pacstall -Qa "${package_name}#${PRNUM}@github:${GITHUB_REPOSITORY}" || exit 1
+            echo "::endgroup::"
+          done
+      - name: Output Package Trees
+        if: steps.changes.outputs.pacscripts == 'true'
+        shell: sudo -E -u dio bash {0}
+        env:
+          GITHUB_ACTIONS: true
+        run: |
+          mapfile -t list < <(pacstall -L)
+          for pkg in "${list[@]}"; do
+            echo "::group::${pkg}"
+            pacstall -T "${pkg}"
+            echo "::endgroup::"
+          done
+      - name: Show APT Packages
+        if: steps.changes.outputs.pacscripts == 'true'
+        shell: sudo -E -u dio bash {0}
+        env:
+          GITHUB_ACTIONS: true
+        run: |
+          mapfile -t list < <(pacstall -L)
+          for pkg in "${list[@]}"; do
+            echo "::group::${pkg}"
+            gives="$(pacstall -Ci "${pkg}" _gives 2>/dev/null || echo "${pkg}")"
+            version="$(dpkg-query -W -f='${Version}' "$gives")"
+            apt-cache show "${gives}=${version}"
+            unset gives version
+            echo "::endgroup::"
+          done
+      - name: Uninstalling Packages
+        if: steps.changes.outputs.pacscripts == 'true'
+        shell: sudo -E -u dio bash {0}
+        env:
+          GITHUB_ACTIONS: true
+          METADIR: /var/lib/pacstall/metadata
+        run: |
+          function array.contains() {
+              local check
+              local -n arra="${1:?No array passed to array.contains}"
+              local input="${2:?No input given to array.contains}"
+              for check in "${arra[@]}"; do
+                  if [[ ${check} == "${input}" ]]; then
+                      return 0
+                  fi
+              done
+              return 1
+          }
+          function stacktrace() {
+            catch=$?
+            return "${catch}"
+          }
+          source /usr/share/pacstall/scripts/dep-tree.sh
+          mapfile -t list < <(pacstall -L)
+          dep_tree.loop_traits order "${list[@]}"
+          for changed_file in "${order[@]}"; do
+              echo "::group::${changed_file}"
+              unset pbase srcbase pkgprior
+              pbase="$(pacstall -Ci ${changed_file} base 2> /dev/null || echo pkgbase)"
+              if [[ ${pbase} == "pkgbase" ]]; then
+                srcbase="${changed_file}"
+              else
+                srcbase="${pbase}"
+              fi
+              pkgprior="$(./scripts/srcinfo.sh read packages/${srcbase}/.SRCINFO priority ${pbase}:${changed_file})"
+              if [[ ${pkgprior} == "essential" ]]; then
+                echo "Skipping removal of essential package ${changed_file}..."
+              else
+                pacstall --disable-prompts -R ${changed_file} || exit 1
+                echo "::endgroup::"
+              fi
+          done

@@ -1,0 +1,19 @@
+pkgbase = topgrade-bin
+	gives = topgrade
+	pkgver = 16.0.4
+	pkgdesc = Upgrades everything on your system
+	arch = amd64
+	arch = arm64
+	breaks = topgrade
+	breaks = topgrade-deb
+	breaks = topgrade-app
+	breaks = topgrade-git
+	breaks = topgrade-musl-bin
+	maintainer = Oren Klopfer <oren@taumoda.com>
+	repology = project: topgrade
+	source_amd64 = https://github.com/topgrade-rs/topgrade/releases/download/v16.0.4/topgrade-v16.0.4-x86_64-unknown-linux-gnu.tar.gz
+	sha256sums_amd64 = f4b42cc5a8e002282230f3bc5d2c95ac0285b71ffd360b0cf9d3a3765c6fa4e2
+	source_arm64 = https://github.com/topgrade-rs/topgrade/releases/download/v16.0.4/topgrade-v16.0.4-aarch64-unknown-linux-gnu.tar.gz
+	sha256sums_arm64 = f3bb23aea80767a097bcba3d8f9cd7fec96b194249c59ba72fcca9f19f063b44
+
+pkgname = topgrade-bin

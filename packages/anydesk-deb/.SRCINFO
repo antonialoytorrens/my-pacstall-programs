@@ -1,0 +1,13 @@
+pkgbase = anydesk-deb
+	gives = anydesk
+	pkgver = 8.0.3
+	pkgdesc = AnyDesk provides platform independent remote access to personal computers and other devices running the host application
+	arch = amd64
+	breaks = anydesk-bin
+	incompatible = debian:trixie
+	maintainer = Oren Klopfer <oren@taumoda.com>
+	repology = project: anydesk
+	source = http://deb.anydesk.com/pool/main/a/anydesk/anydesk_8.0.3_amd64.deb
+	sha256sums = a9cb4864eecf2a9d8b9e1cb3a152d25a90a5c86045279be3edd6c35264a52fb0
+
+pkgname = anydesk-deb

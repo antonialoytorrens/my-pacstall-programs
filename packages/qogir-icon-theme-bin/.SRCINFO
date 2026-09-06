@@ -1,0 +1,15 @@
+pkgbase = qogir-icon-theme-bin
+	gives = qogir-icon-theme
+	pkgver = 2025-02-15
+	pkgdesc = A colorful design icon theme for linux desktops
+	arch = amd64
+	makedepends = gtk-update-icon-cache
+	breaks = qogir-icon-theme
+	breaks = qogir-icon-theme-git
+	breaks = qogir-icon-theme-deb
+	breaks = qogir-icon-theme-app
+	maintainer = wizard-28 <wiz28@pm.me>
+	source = @qogir-icon-theme-bin~2025-02-15::https://github.com/vinceliuice/Qogir-icon-theme/archive/2025-02-15.tar.gz
+	sha256sums = b0d07cad5601e0341a53a62df0ed111823b75fc38741d435486620a59fb239ee
+
+pkgname = qogir-icon-theme-bin

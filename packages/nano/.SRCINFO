@@ -1,0 +1,21 @@
+pkgbase = nano
+	pkgver = 9.1
+	pkgdesc = Free replacement for the Pico text editor
+	arch = any
+	makedepends = libncurses-dev
+	makedepends = groff
+	makedepends = autoconf
+	makedepends = make
+	makedepends = automake
+	makedepends = autopoint
+	makedepends = gcc
+	makedepends = gettext
+	makedepends = git
+	makedepends = pkg-config
+	makedepends = texinfo
+	license = GPL-3.0
+	repology = project: nano
+	source = @nano~9.1::https://nano-editor.org/dist/v9/nano-9.1.tar.xz
+	sha256sums = 5f47764274cb7532349ce0aa20ec10f1e8e851a6e9fa3eb66812c43d196db042
+
+pkgname = nano

@@ -1,0 +1,21 @@
+pkgbase = bottom-deb
+	gives = bottom
+	pkgver = 0.14.1
+	pkgdesc = A customizable cross-platform graphical process/system monitor for the terminal
+	url = https://clementtsang.github.io/bottom
+	arch = amd64
+	arch = arm64
+	arch = armhf
+	breaks = bottom-git
+	breaks = bottom-bin
+	replaces = bottom
+	maintainer = Nezred <jmnezred@pm.me>
+	repology = project: bottom
+	source_amd64 = https://github.com/ClementTsang/bottom/releases/download/0.14.1/bottom_0.14.1-1_amd64.deb
+	sha256sums_amd64 = 1908c77e060e26477f190d8496dd9cdd942187b4c84551131c1d1bb465007f99
+	source_arm64 = https://github.com/ClementTsang/bottom/releases/download/0.14.1/bottom_0.14.1-1_arm64.deb
+	sha256sums_arm64 = 6966094f1d2ba08fb7a9149b3681e8e44e08eef283b1b1e3ac1b7b6a4993312c
+	source_armhf = https://github.com/ClementTsang/bottom/releases/download/0.14.1/bottom_0.14.1-1_armhf.deb
+	sha256sums_armhf = a55fb7cf8ac18893b584f6717a70a06c8d6eb1134aff4e591ad6e3944da2618a
+
+pkgname = bottom-deb

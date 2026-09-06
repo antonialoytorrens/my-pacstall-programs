@@ -1,0 +1,15 @@
+pkgbase = kakoune
+	pkgver = 2026.05.21
+	pkgdesc = mawww's experiment for a better code editor
+	url = https://kakoune.org/
+	arch = amd64
+	arch = arm64
+	arch = armhf
+	arch = i386
+	replaces = kakoune
+	license = Unlicense
+	repology = project: kakoune
+	source = https://github.com/mawww/kakoune/archive/refs/tags/v2026.05.21.tar.gz
+	sha256sums = 7ef778bd199e05977841e6f69aad2bee6cd58fb23b0e4bc265d012d42de17580
+
+pkgname = kakoune

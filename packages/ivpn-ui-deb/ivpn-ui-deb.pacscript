@@ -1,0 +1,11 @@
+pkgname="ivpn-ui-deb"
+gives="ivpn-ui"
+pacdeps=("ivpn-deb")
+breaks=("${gives}-git")
+repology=("project: ${gives}")
+pkgver="3.15.6"
+source=("https://repo.ivpn.net/stable/pool/${gives}_${pkgver}_amd64.deb")
+pkgdesc="Official IVPN Desktop app - UI Package"
+sha256sums=("00c5efce1afbd00baccf388a4a6eb37e3f3d54037dcebe5768577402befbf977")
+arch=('amd64')
+maintainer=("Oren Klopfer <oren@taumoda.com>")

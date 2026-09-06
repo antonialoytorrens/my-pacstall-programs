@@ -1,0 +1,21 @@
+pkgbase = python3-gbinder-deb
+	gives = python3-gbinder
+	pkgver = 1.1.2
+	pkgrel = 2
+	pkgdesc = Cython extension module for C++ gbinder functions
+	arch = amd64
+	arch = arm64
+	pacdeps = libgbinder-deb
+	replaces = python3-gbinder
+	compatible = ubuntu:noble
+	compatible = ubuntu:devel
+	compatible = debian:13
+	compatible = debian:sid
+	maintainer = James Ed Randson <jimedrand@disroot.org>
+	repology = project: python3-gbinder
+	source_amd64 = https://github.com/jimed-rand/waydroid-deb-archive/releases/download/1.5.4/python3-gbinder_1.1.2_amd64.deb
+	sha256sums_amd64 = fec13f42bf98e0848549d6c5c9c4685945da643945baf30e556c6f4d1f118bd4
+	source_arm64 = https://github.com/jimed-rand/waydroid-deb-archive/releases/download/1.5.4/python3-gbinder_1.1.2_arm64.deb
+	sha256sums_arm64 = 0eb8f6b33b80a88d191ec442f321f254e03c2a471edce8967afeb6d3b0b4bba1
+
+pkgname = python3-gbinder-deb

@@ -1,0 +1,11 @@
+pkgbase = yandex-browser-beta-deb
+	gives = yandex-browser-beta
+	pkgver = 25.4.1.1133-1
+	pkgdesc = The web browser from Yandex - Beta
+	arch = amd64
+	maintainer = Oren Klopfer <oren@taumoda.com>
+	repology = project: yandex-browser-beta
+	source = http://repo.yandex.ru/yandex-browser/deb/pool/main/y/yandex-browser-beta/yandex-browser-beta_25.4.1.1133-1_amd64.deb
+	sha256sums = d170ef17c351df15ae921a30029b17325037a37bbdcd743c4611490868160f7d
+
+pkgname = yandex-browser-beta-deb

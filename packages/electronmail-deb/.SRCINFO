@@ -1,0 +1,13 @@
+pkgbase = electronmail-deb
+	gives = electron-mail
+	pkgver = 5.3.8
+	pkgdesc = Unofficial ProtonMail Desktop App
+	arch = amd64
+	breaks = electron-mail-app
+	replaces = electron-mail
+	maintainer = Tai Lam <taivlam-aur-mpr.tinsmith796@silomails.com>
+	repology = project: electronmail
+	source = https://github.com/vladimiry/ElectronMail/releases/download/v5.3.8/electron-mail-5.3.8-linux-amd64.deb
+	sha256sums = 5b3db21ac7e655986ac10da9eed04dc7594a3eb37909e7a36cb635af670f939e
+
+pkgname = electronmail-deb

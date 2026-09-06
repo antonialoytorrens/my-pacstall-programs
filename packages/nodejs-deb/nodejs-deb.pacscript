@@ -1,0 +1,16 @@
+pkgname="nodejs-deb"
+gives="nodejs"
+repology=("project: ${gives}")
+arch=('amd64' 'arm64')
+_major_version="26"
+pkgver="26.7.0"
+url='https://nodejs.org'
+source_amd64=("https://deb.nodesource.com/node_${_major_version}.x/pool/main/n/nodejs/nodejs_${pkgver}-1nodesource1_amd64.deb")
+source_arm64=("https://deb.nodesource.com/node_${_major_version}.x/pool/main/n/nodejs/nodejs_${pkgver}-1nodesource1_arm64.deb")
+sha256sums_amd64=("3aeac1e8aa4b4dcd3aefec4425e6f683101b24ca349bfe2b491be41e10d0c721")
+sha256sums_arm64=("1e62878536fc75982dd20b9d7d8760d4a6a7e72fbdc0461bffb22efcffad4a66")
+breaks=("${gives}" "${gives}-git" "${gives}-bin" "${gives}-app")
+replaces=("${gives}" "node")
+pkgdesc="JavaScript runtime built on Chrome's V8 JavaScript engine"
+maintainer=("villamorrd <villamorrd@students.nu-moa.edu.ph>")
+license=('MIT')

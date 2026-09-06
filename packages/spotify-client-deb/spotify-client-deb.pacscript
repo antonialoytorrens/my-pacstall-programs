@@ -1,0 +1,11 @@
+pkgname="spotify-client-deb"
+gives="spotify-client"
+repology=("project: spotify")
+breaks=("${gives}-git" "${gives}-app" "${gives}-bin" "spotify")
+replaces=("${gives}")
+pkgver="1.2.63.394.g126b0d89"
+source=("https://repository.spotify.com/pool/non-free/s/${gives}/${gives}_${pkgver}_amd64.deb")
+pkgdesc="Spotify streaming music client"
+sha256sums=("99c229f829ccb9c2a188be80d1241d2b8c8fd35f1e8d773438c0f612d68e940e")
+arch=('amd64')
+maintainer=("Oren Klopfer <oren@taumoda.com>")

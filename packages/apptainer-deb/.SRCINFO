@@ -1,0 +1,10 @@
+pkgbase = apptainer-deb
+	gives = apptainer
+	pkgver = 1.5.2
+	pkgdesc = container platform focused on supporting "Mobility of Compute" formerly known as Singularity
+	arch = amd64
+	repology = project: apptainer
+	source = https://github.com/apptainer/apptainer/releases/download/v1.5.2/apptainer_1.5.2_amd64.deb
+	sha256sums = b5ea4ddbb7db2bfd396b4e64adaedb75d990fc7efd851189472899a1bd521d89
+
+pkgname = apptainer-deb

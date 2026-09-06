@@ -1,0 +1,16 @@
+pkgbase = joplin-desktop-app
+	gives = joplin-desktop
+	pkgver = 3.7.1
+	pkgdesc = Joplin - the secure note taking and to-do app with synchronisation capabilities for Windows, macOS, Linux, Android and iOS
+	url = https://joplinapp.org/
+	arch = amd64
+	depends = libfuse2
+	makedepends = libfuse2
+	maintainer = lfromanini <lfromanini@yahoo.com>
+	repology = project: joplin-desktop
+	source = https://github.com/laurent22/joplin/releases/download/v3.7.1/Joplin-3.7.1.AppImage
+	source = joplin-desktop.png::https://joplinapp.org/images/Icon512.png
+	sha256sums = f3ad3ea94bd9346c1fc8d870f489093a46d9e1b169179d03fb55da4ff8fccfbe
+	sha256sums = SKIP
+
+pkgname = joplin-desktop-app

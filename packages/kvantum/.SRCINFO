@@ -1,0 +1,17 @@
+pkgbase = kvantum
+	pkgver = 1.1.8
+	pkgdesc = SVG-based theme engine for Qt
+	arch = any
+	makedepends = g++
+	makedepends = cmake
+	makedepends = libx11-dev
+	makedepends = qt6-base-dev>=6.6.0
+	makedepends = qt6-svg-dev
+	makedepends = libkf6windowsystem-dev
+	makedepends = libxext-dev
+	breaks = qt6-style-kvantum
+	incompatible = debian:bullseye
+	source = @kvantum~1.1.8::https://github.com/tsujan/Kvantum/releases/download/V1.1.8/Kvantum-1.1.8.tar.xz
+	sha256sums = 7aa9099345e48048ebdad768f583944ac042f87b216fa0b26a169c7e05425047
+
+pkgname = kvantum

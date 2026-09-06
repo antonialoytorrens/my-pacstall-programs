@@ -1,0 +1,9 @@
+pkgname="internxt-deb"
+gives="internxt"
+pkgver="2.6.1"
+repology=("project: internxt")
+source=("https://github.com/internxt/drive-desktop-linux/releases/download/v${pkgver}/internxt_${pkgver}_amd64.deb")
+pkgdesc="Safest cloud storage for all your files, photos, and more"
+sha256sums=("fcb2da372f8387031f21f037523253e200c639581a81c288c1e830a4cf7f7d9d")
+arch=('amd64')
+maintainer=("Elsie19 <elsie19@pm.me>")

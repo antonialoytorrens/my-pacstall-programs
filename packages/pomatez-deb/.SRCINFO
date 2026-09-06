@@ -1,0 +1,21 @@
+pkgbase = pomatez-deb
+	gives = pomatez
+	pkgver = 1.10.0
+	pkgdesc = Stay Focused. Take a Break.
+	arch = amd64
+	depends = libgtk-3-0
+	depends = libnotify4
+	depends = libnss3
+	depends = libxss1
+	depends = libxtst6
+	depends = xdg-utils
+	depends = libatspi2.0-0
+	depends = libuuid1
+	depends = libappindicator3-1
+	depends = libsecret-1-0
+	replaces = pomatez
+	repology = project: pomatez
+	source = https://github.com/roldanjr/pomatez/releases/download/v1.10.0/Pomatez-v1.10.0-linux-amd64.deb
+	sha256sums = 182e2498479b0462959dac1e4343f23a0218c32bf34fbb4653882de69435a3f6
+
+pkgname = pomatez-deb

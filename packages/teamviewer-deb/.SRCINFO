@@ -1,0 +1,26 @@
+pkgbase = teamviewer-deb
+	gives = teamviewer
+	pkgver = 15.74.6
+	pkgdesc = Application for remote desktop sharing and online meetings
+	arch = amd64
+	arch = arm64
+	depends = libqt5x11extras5
+	depends = libqt5quickcontrols2-5
+	depends = libqt5webengine5
+	depends = libqt5svg5
+	depends = hicolor-icon-theme
+	breaks = teamviewer
+	breaks = teamviewer-bin
+	breaks = teamviewer-git
+	breaks = teamviewer-app
+	breaks = teamviewer-deb
+	replaces = teamviewer
+	license = custom:custom
+	maintainer = heyzsh <haidarzsh@gmail.com>
+	repology = project: teamviewer
+	source_amd64 = https://download.teamviewer.com/download/linux/teamviewer_amd64.deb
+	sha256sums_amd64 = 4cf630b2ae10bc8d1bf9cba2c36e14c9fbd97d794aaea86e288fbe55fb8a38e3
+	source_arm64 = https://download.teamviewer.com/download/linux/teamviewer_arm64.deb
+	sha256sums_arm64 = 0033cfbfde75ee945d6892fba6c5a3605011ec678a2e151bc528b431ab3666b2
+
+pkgname = teamviewer-deb

@@ -1,0 +1,13 @@
+pkgbase = matugen-bin
+	pkgver = 4.2.0
+	pkgdesc = Material you color generation tool with templates
+	url = https://github.com/InioX/matugen
+	arch = x86_64
+	replaces = matugen-bin
+	license = GPL-2.0
+	maintainer = aKqir24 <aKqir24@github.com>
+	repology = project: matugen
+	source = https://github.com/InioX/matugen/releases/download/v4.2.0/matugen-4.2.0-x86_64.tar.gz
+	sha256sums = a2e3b50e49ed6439999ba3c252ed04fabd98ee4e9d12e5e5dff2e66370569751
+
+pkgname = matugen-bin

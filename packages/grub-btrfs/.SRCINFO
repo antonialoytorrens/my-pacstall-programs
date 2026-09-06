@@ -1,0 +1,16 @@
+pkgbase = grub-btrfs
+	pkgver = 4.14
+	pkgdesc = Include btrfs snapshots at boot options
+	url = https://github.com/Antynea/grub-btrfs
+	arch = any
+	depends = btrfs-progs
+	depends = grub2-common
+	optdepends = snapper: For snapper support
+	optdepends = inotify-tools: For grub-btrfsd daemon
+	license = GPL-3.0-only
+	maintainer = Eric Renfro <psi-jack@linux-help.org>
+	maintainer = Tianyu Lu <tianyu@lu.fm>
+	source = grub-btrfs-4.14.tar.gz::https://github.com/Antynea/grub-btrfs/archive/refs/tags/v4.14.tar.gz
+	b2sums = 361fabb41e603f84af096925db7498e24ff68436b9f32cc6d1fe81dd4db58826d02052181d577b6484290016c11009d0b138c4187fcedb76848ef7a52b55222f
+
+pkgname = grub-btrfs

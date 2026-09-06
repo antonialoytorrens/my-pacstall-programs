@@ -1,0 +1,10 @@
+pkgname="yandex-browser-stable-deb"
+gives="yandex-browser-stable"
+replaces=("${gives}")
+repology=("project: yandex-browser")
+pkgver="25.4.1.1132-1"
+source=("http://repo.yandex.ru/yandex-browser/deb/pool/main/y/${gives}/${gives}_${pkgver}_amd64.deb")
+pkgdesc="The web browser from Yandex"
+sha256sums=("6e7a60d9540da163d7835be879af552f0e478eb2bd4a15974e25c3118110d53f")
+arch=('amd64')
+maintainer=("Oren Klopfer <oren@taumoda.com>")

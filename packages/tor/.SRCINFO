@@ -1,0 +1,23 @@
+pkgbase = tor
+	pkgver = 0.4.8.16
+	pkgdesc = Tor protects your privacy on the internet by hiding the connection between your Internet address and the services you use
+	arch = any
+	depends = openssl
+	makedepends = make
+	makedepends = autoconf
+	makedepends = libevent-dev
+	makedepends = libnss3-dev
+	makedepends = libzstd-dev
+	makedepends = liblzma-dev
+	makedepends = openssl
+	makedepends = libssl-dev
+	makedepends = ca-certificates
+	makedepends = libseccomp-dev
+	makedepends = zlib1g-dev
+	breaks = tor-git
+	replaces = tor
+	repology = project: tor
+	source = @tor~0.4.8.16::https://dist.torproject.org/tor-0.4.8.16.tar.gz
+	sha256sums = 6540dd377a120fb8e7d27530aa3b7ff72a0fa5b4f670fe1d64c987c1cfd390cb
+
+pkgname = tor

@@ -1,0 +1,17 @@
+pkgbase = dunst
+	pkgver = 1.13.2
+	pkgdesc = A highly configurable and lightweight notification daemon
+	arch = any
+	makedepends = libdbus-1-dev
+	makedepends = libxinerama1
+	makedepends = libxrandr2
+	makedepends = libxss1
+	makedepends = libxss-dev
+	makedepends = libgtk-3-dev
+	makedepends = libnotify-dev
+	maintainer = Elsie19 <elsie19@pm.me>
+	repology = project: dunst
+	source = @dunst~1.13.2::https://github.com/dunst-project/dunst/archive/refs/tags/v1.13.2.tar.gz
+	sha256sums = c68645cecef4a45840cd67c19a18a3a21ecae6b331e9864c2b745c31aee5fc85
+
+pkgname = dunst

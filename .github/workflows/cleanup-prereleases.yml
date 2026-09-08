@@ -5,10 +5,10 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
     inputs:
-      retention_days:
-        description: Delete prereleases older than this many days
+      keep_count:
+        description: Number of newest prereleases to keep per package
         required: true
-        default: '30'
+        default: '3'
         type: string
 
 permissions:
@@ -20,12 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Delete prereleases older than retention
+      - name: Keep newest prereleases per package
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          RETENTION_DAYS: ${{ inputs.retention_days || '30' }}
+          KEEP_COUNT: ${{ inputs.keep_count || '3' }}
         run: |
           chmod +x ./scripts/cleanup-old-prereleases.sh
           ./scripts/cleanup-old-prereleases.sh

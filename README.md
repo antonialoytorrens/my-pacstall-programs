@@ -31,7 +31,7 @@ docker run --privileged --rm tonistiigi/binfmt --install all
 
 Push to `master` builds changed packages (path filters) and publishes a **prerelease** per package. Tags are prefixed with the package name, e.g. `gatus-5.36.0-20260906120000`, so you can install/test from Releases before promoting to your apt repo.
 
-A daily workflow deletes prereleases older than **30 days**.
+A daily workflow keeps the **3** newest prereleases **per package** and deletes the rest (stable releases are never touched).
 
 ## reprepro
 

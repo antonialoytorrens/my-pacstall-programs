@@ -41,6 +41,8 @@ After testing a prerelease, add each `.deb` to your reprepro repository. Archite
 reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_amd64.deb
 reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_arm64.deb
 reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_armhf.deb
+reprepro -b /path/to/repo includedeb <codename> ./gatus-pgsql_5.36.0_all.deb
+reprepro -b /path/to/repo includedeb <codename> ./gatus-sqlite_5.36.0_all.deb
 reprepro -b /path/to/repo export
 ```
 

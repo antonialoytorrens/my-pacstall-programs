@@ -19,10 +19,15 @@ TIMESTAMP="$(date -u +%Y%m%d%H%M%S)"
 TAG="${PACKAGE}-${VERSION}-${TIMESTAMP}"
 RELEASE_NAME="${TAG}"
 
-mapfile -t PKGS < <(ls "${PACKAGE}"_[0-9]*_*.deb 2>/dev/null | sort || true)
+mapfile -t PKGS < <(
+  {
+    ls "${PACKAGE}"_[0-9]*_*.deb 2>/dev/null || true
+    ls "${PACKAGE}"-*_*.deb 2>/dev/null || true
+  } | sort -u
+)
 
 if [ "${#PKGS[@]}" -eq 0 ]; then
-  echo "No ${PACKAGE}_*.deb artifacts found" >&2
+  echo "No ${PACKAGE}_*.deb / ${PACKAGE}-*.deb artifacts found" >&2
   exit 1
 fi
 

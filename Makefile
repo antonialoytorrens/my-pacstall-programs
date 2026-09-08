@@ -7,6 +7,8 @@
 #   reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_amd64.deb
 #   reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_arm64.deb
 #   reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_armhf.deb
+#   reprepro -b /path/to/repo includedeb <codename> ./gatus-pgsql_5.36.0_all.deb
+#   reprepro -b /path/to/repo includedeb <codename> ./gatus-sqlite_5.36.0_all.deb
 #   reprepro -b /path/to/repo export
 #
 # (Or use `reprepro include <codename> foo.changes` when you have a .changes

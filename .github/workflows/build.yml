@@ -134,10 +134,23 @@ jobs:
           test -f "${PKG}"
           dpkg-deb -I "${PKG}" >/dev/null
           ls -lh "${PKG}"
+          for helper in gatus-pgsql gatus-sqlite; do
+            HELPER_PKG="$(ls ${helper}_*_all.deb)"
+            test -f "${HELPER_PKG}"
+            dpkg-deb -I "${HELPER_PKG}" >/dev/null
+            ls -lh "${HELPER_PKG}"
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: gatus-deb-${{ matrix.arch }}
           path: gatus_*_${{ matrix.arch }}.deb
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'amd64'
+        with:
+          name: gatus-deb-all
+          path: |
+            gatus-pgsql_*_all.deb
+            gatus-sqlite_*_all.deb
 
   build-glitchtip:
     needs: changes

@@ -40,8 +40,7 @@ WORKDIR /build
 COPY packagelist srclist /build/
 COPY packages/ /build/packages/
 
-# Main package only (storage helpers are not built by CI/Makefile).
-RUN pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus \
+RUN pacstall -BPNs -I packages/gatus/gatus.pacscript:pkgbase \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/pacstall /var/cache/apt/archives/*
 

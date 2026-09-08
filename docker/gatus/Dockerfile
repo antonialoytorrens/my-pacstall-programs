@@ -40,7 +40,12 @@ WORKDIR /build
 COPY packagelist srclist /build/
 COPY packages/ /build/packages/
 
-RUN pacstall -BPNs -I packages/gatus/gatus.pacscript:pkgbase \
+# Helpers depend on gatus via apt; build main first, install it, then the splits.
+RUN set -e \
+  && pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus \
+  && apt-get install -y -qq --no-install-recommends ./gatus_*.deb \
+  && pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus-pgsql \
+  && pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus-sqlite \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/pacstall /var/cache/apt/archives/*
 

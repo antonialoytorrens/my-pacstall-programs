@@ -1,9 +1,0 @@
-pkgname="vivaldi-deb"
-pkgver="7.8.3925.73"
-repology=("project: vivaldi")
-source=("https://downloads.vivaldi.com/stable/vivaldi-stable_${pkgver}-1_amd64.deb")
-pkgdesc="An advanced browser made with the power user in mind"
-gives="vivaldi-stable"
-sha256sums=("03901bf61af8d367bfcbb10da16cb67d60fe6b0d2b05ded9c449c05e223c4e4b")
-arch=('amd64')
-maintainer=("Oren Klopfer <oren@taumoda.com>")

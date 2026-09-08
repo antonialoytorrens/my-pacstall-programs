@@ -1,0 +1,345 @@
+pkgname="weblate"
+pkgver="2026.7.1"
+pkgrel="1"
+arch=('amd64' 'arm64' 'armhf')
+url="https://weblate.org/"
+license=('GPL-3.0-or-later')
+pkgdesc="Weblate continuous localization (native systemd, bundled venv, dbconfig-pgsql)"
+maintainer=("Antoni Aloy <https://github.com/antonialoytorrens/weblate-deb>")
+external_connection=true
+
+_weblate_domain="weblate.localhost.local"
+_weblate_db_name="weblate"
+_weblate_db_user="weblate"
+_weblate_http_port="38447"
+_install_prefix="/opt/weblate"
+_python="python3.13"
+_psycopg_c_ver="3.3.4"
+
+# Pacstall calls hooks with no args; dpkg argv is available at top-level when embedded.
+_DPKG_ARGV=("$@")
+
+source=(
+  "https://files.pythonhosted.org/packages/07/40/1367940d6615d61df263b88a3c661c39b30f1b2611029724e42c7c0c2435/weblate-${pkgver}.tar.gz"
+  "weblate.env.in"
+  "weblate_settings.py.in"
+  "weblate-web.service"
+  "weblate-celery.service"
+  "weblate.tmpfiles"
+)
+
+makedepends_trixie=(
+  "python3.13" "python3.13-venv" "python3.13-dev"
+)
+
+makedepends+=(
+  "build-essential" "pkg-config" "cmake"
+  "libpq-dev" "libxml2-dev" "libxslt1-dev" "libffi-dev"
+  "libcairo2-dev"
+  "libgirepository-2.0-dev" "gir1.2-girepository-2.0-dev"
+  "gir1.2-pango-1.0" "gir1.2-harfbuzz-0.0" "gir1.2-rsvg-2.0"
+  "libacl1-dev" "liblz4-dev" "libzstd-dev"
+  "libjpeg-dev" "zlib1g-dev"
+  "tesseract-ocr" "libtesseract-dev" "libleptonica-dev"
+  "curl" "ca-certificates" "tzdata" "git"
+  "rustc" "cargo"
+)
+
+depends_trixie=(
+  "python3.13"
+)
+
+depends+=(
+  "libpq5" "libxml2" "libxslt1.1" "libcairo2"
+  "libgirepository-2.0-0" "gir1.2-pango-1.0" "gir1.2-rsvg-2.0"
+  "libacl1" "liblz4-1" "libzstd1" "libjpeg62-turbo" "zlib1g"
+  "libtesseract5" "tesseract-ocr"
+  "postgresql" "valkey-server" "openssh-client" "git"
+  "dbconfig-pgsql" "debconf" "debconf-utils"
+)
+
+backup=('etc/weblate/weblate.env' 'etc/weblate/weblate_settings.py')
+
+build() {
+  set -e
+  # cc-rs on armhf: crates that force -march drop GCC's default -mfpu → "lacks an FPU".
+  export CFLAGS_armv7_unknown_linux_gnueabihf="-march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard"
+
+  local staging="${srcdir}/staging"
+  local venv="${staging}${_install_prefix}/venv"
+  mkdir -p "${venv}"
+  "${_python}" -m venv "${venv}"
+  "${venv}/bin/pip" install -q --no-cache-dir --upgrade pip setuptools wheel
+
+  "${venv}/bin/pip" install -q --no-cache-dir --no-binary psycopg-c \
+    "psycopg[c]==${_psycopg_c_ver}"
+
+  "${venv}/bin/pip" install -q --no-cache-dir \
+    "${srcdir}/weblate-${pkgver}" gunicorn
+
+  sed -i "s|${staging}||g" "${venv}/pyvenv.cfg"
+  find "${venv}/bin" -type f -exec sed -i "s|${staging}||g" {} +
+
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources} 2>/dev/null || true
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info 2>/dev/null || true
+  find "${venv}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  find "${venv}" -name "*.pyc" -delete 2>/dev/null || true
+
+  local site_pkgs
+  site_pkgs="$(echo "${venv}/lib"/python*/site-packages)"
+  find "${site_pkgs}" -maxdepth 3 -type d \( -name tests -o -name test \) \
+    -not -path "*/django/*" \
+    -not -path "*/celery/*" \
+    -not -path "*/social_core/*" \
+    -not -path "*/social_django/*" \
+    -exec rm -rf {} + 2>/dev/null || true
+
+  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+}
+
+_render_in() {
+  sed -e "s|@WEBLATE_DOMAIN@|${_weblate_domain}|g" \
+      -e "s|@pkgver@|${pkgver}|g" \
+      -e "s|@WEBLATE_DB_NAME@|${_weblate_db_name}|g" \
+      -e "s|@WEBLATE_DB_USER@|${_weblate_db_user}|g" \
+      -e "s|@WEBLATE_HTTP_PORT@|${_weblate_http_port}|g" \
+      "${1}" > "${2}"
+}
+
+package() {
+  local staging="${srcdir}/staging"
+  mkdir -p "${pkgdir}${_install_prefix}"
+  cp -a "${staging}${_install_prefix}/." "${pkgdir}${_install_prefix}/"
+
+  mkdir -p "${pkgdir}/etc/weblate"
+  _render_in "${srcdir}/weblate.env.in" \
+    "${pkgdir}/etc/weblate/weblate.env"
+  _render_in "${srcdir}/weblate_settings.py.in" \
+    "${pkgdir}/etc/weblate/weblate_settings.py"
+
+  install -Dm644 "${srcdir}/weblate-web.service" \
+    "${pkgdir}/usr/lib/systemd/system/weblate-web.service"
+  install -Dm644 "${srcdir}/weblate-celery.service" \
+    "${pkgdir}/usr/lib/systemd/system/weblate-celery.service"
+
+  install -Dm644 "${srcdir}/weblate.tmpfiles" \
+    "${pkgdir}/usr/lib/tmpfiles.d/weblate.conf"
+
+  mkdir -p "${pkgdir}/var/lib/weblate"
+  mkdir -p "${pkgdir}/var/cache/weblate"
+  mkdir -p "${pkgdir}/var/log/weblate"
+
+  mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/weblate/install"
+  printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/weblate/install/pgsql"
+
+  mkdir -p "${pkgdir}/DEBIAN"
+  cat > "${pkgdir}/DEBIAN/config" << EOF
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
+  dbc_dbname="${_weblate_db_name}"
+  dbc_dbuser="${_weblate_db_user}"
+  . /usr/share/dbconfig-common/dpkg/config.pgsql
+  dbc_go weblate "\$@"
+fi
+EOF
+  chmod 755 "${pkgdir}/DEBIAN/config"
+}
+
+ensure_pg_role_db() {
+  local role="$1"
+  local dbname="$2"
+  local pass="${3:-}"
+  if runuser -u postgres -- psql -tc \
+      "SELECT 1 FROM pg_roles WHERE rolname='${role}'" | grep -q 1; then
+    if [ -n "${pass}" ]; then
+      runuser -u postgres -- psql -c \
+        "ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}';" 2>/dev/null || true
+    else
+      runuser -u postgres -- psql -c \
+        "ALTER ROLE ${role} WITH LOGIN;" 2>/dev/null || true
+    fi
+  elif [ -n "${pass}" ]; then
+    runuser -u postgres -- psql -c \
+      "CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}';"
+  else
+    runuser -u postgres -- psql -c \
+      "CREATE ROLE ${role} WITH LOGIN;"
+  fi
+  runuser -u postgres -- psql -tc \
+    "SELECT 1 FROM pg_database WHERE datname='${dbname}'" | grep -q 1 \
+    || runuser -u postgres -- createdb -O "${role}" "${dbname}"
+}
+
+post_install() {
+  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
+    set -- "${_DPKG_ARGV[@]}"
+  elif [ "$#" -eq 0 ]; then
+    set -- configure
+  fi
+
+  local venv="/opt/weblate/venv"
+  local env_file="/etc/weblate/weblate.env"
+  local settings="/etc/weblate/weblate_settings.py"
+  local pkg="weblate"
+  local weblate_bin="${venv}/bin/weblate"
+
+  . /usr/share/debconf/confmodule
+
+  if ! id -u weblate &>/dev/null; then
+    adduser --system --group --home /var/lib/weblate \
+      --no-create-home --shell /bin/bash weblate
+  fi
+
+  mkdir -p /var/lib/weblate /var/cache/weblate /var/log/weblate
+  chown -R weblate:weblate /var/lib/weblate /var/cache/weblate /var/log/weblate
+
+  if [ ! -e /home/weblate ]; then
+    ln -s /var/lib/weblate /home/weblate
+  fi
+
+  run_as_weblate() {
+    runuser -u weblate -- bash -c '
+      set -a; source "$1"; set +a
+      export DJANGO_SETTINGS_MODULE=weblate_settings
+      export PYTHONPATH="/etc/weblate${PYTHONPATH:+:$PYTHONPATH}"
+      shift
+      exec "$@"
+    ' bash "$env_file" "$@"
+  }
+
+  if grep -q '__SECRETKEY_PLACEHOLDER__' "$env_file"; then
+    local secret
+    secret=$("${venv}/bin/weblate-generate-secret-key" 2>/dev/null || \
+      "${venv}/bin/python" -c "import secrets; print(secrets.token_urlsafe(50))")
+    sed -i "s|__SECRETKEY_PLACEHOLDER__|${secret}|" "$env_file"
+  fi
+
+  if [ ! -f /usr/share/dbconfig-common/dpkg/postinst.pgsql ]; then
+    fancy_message error "dbconfig-pgsql is required but not installed."
+    exit 1
+  fi
+  . /usr/share/dbconfig-common/dpkg/postinst.pgsql
+  dbc_go "$pkg" "$@"
+
+  if [ ! -f /etc/dbconfig-common/${pkg}.conf ]; then
+    fancy_message error "dbconfig-common did not produce /etc/dbconfig-common/${pkg}.conf"
+    exit 1
+  fi
+  # shellcheck disable=SC1091
+  . /etc/dbconfig-common/${pkg}.conf
+
+  write_db_env() {
+    local use_password="$1"
+    grep -vE '^(WEBLATE_DB_NAME|WEBLATE_DB_USER|WEBLATE_DB_PASSWORD|WEBLATE_DB_HOST|WEBLATE_DB_PORT)=' \
+      "$env_file" > "${env_file}.tmp"
+    {
+      cat "${env_file}.tmp"
+      echo "WEBLATE_DB_NAME=${dbc_dbname}"
+      echo "WEBLATE_DB_USER=${dbc_dbuser}"
+      if [ "${use_password}" = "1" ]; then
+        echo "WEBLATE_DB_PASSWORD=${dbc_dbpass}"
+        echo "WEBLATE_DB_HOST=${db_host}"
+        echo "WEBLATE_DB_PORT=${dbc_dbport:-5432}"
+      else
+        echo "WEBLATE_DB_PASSWORD="
+        echo "WEBLATE_DB_HOST="
+        echo "WEBLATE_DB_PORT="
+      fi
+    } > "$env_file"
+    rm -f "${env_file}.tmp"
+  }
+
+  local db_host="${dbc_dbserver:-127.0.0.1}"
+  case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
+
+  if [ "${dbc_install}" != "true" ]; then
+    dbc_dbname="${dbc_dbname:-weblate}"
+    dbc_dbuser="${dbc_dbuser:-weblate}"
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+    write_db_env 0
+  else
+    case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
+      ident:local|ident:|ident:localhost|ident:127.0.0.1)
+        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+        write_db_env 0
+        ;;
+      *)
+        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
+        write_db_env 1
+        ;;
+    esac
+  fi
+
+  chmod 640 "$env_file" "$settings"
+  chown root:weblate "$env_file" "$settings"
+
+  # verify DB connectivity
+  if ! run_as_weblate "$weblate_bin" shell -c \
+      "from django.db import connection; connection.ensure_connection()"; then
+    fancy_message error "Cannot connect to PostgreSQL as '${dbc_dbuser}'. Check /etc/weblate/weblate.env and pg_hba.conf."
+    exit 1
+  fi
+
+  run_as_weblate "$weblate_bin" migrate --noinput
+  run_as_weblate "$weblate_bin" compress --force 2>/dev/null || true
+  run_as_weblate "$weblate_bin" collectstatic --noinput --clear 2>/dev/null || true
+
+  local admin_exists
+  admin_exists=$(run_as_weblate "$weblate_bin" shell -c \
+    "from weblate.auth.models import User; print(User.objects.filter(is_superuser=True).exists())" \
+    2>/dev/null || echo "False")
+
+  if [ "${admin_exists}" != "True" ]; then
+    local admin_pass admin_email
+    admin_pass=$("${venv}/bin/python" -c "import secrets; print(secrets.token_urlsafe(16))")
+    # shellcheck disable=SC1091
+    set -a; source "$env_file"; set +a
+    admin_email="${WEBLATE_ADMIN_EMAIL:-admin@localhost}"
+    run_as_weblate "$weblate_bin" createadmin \
+      --username admin \
+      --email "${admin_email}" \
+      --password "${admin_pass}" \
+      --no-color 2>/dev/null || true
+    fancy_message warn "Admin account created — username: admin — password: ${admin_pass} — SAVE THIS; it will not be shown again."
+  fi
+
+  chmod 750 /var/lib/weblate
+  systemd-tmpfiles --create /usr/lib/tmpfiles.d/weblate.conf 2>/dev/null || true
+
+  systemctl daemon-reload
+  systemctl enable --now weblate-web weblate-celery
+
+  db_stop
+}
+
+pre_remove() {
+  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
+    set -- "${_DPKG_ARGV[@]}"
+  elif [ "$#" -eq 0 ]; then
+    set -- remove
+  fi
+
+  if [ -f /usr/share/dbconfig-common/dpkg/prerm.pgsql ]; then
+    . /usr/share/debconf/confmodule
+    . /usr/share/dbconfig-common/dpkg/prerm.pgsql
+    dbc_go weblate "$@"
+  fi
+  systemctl stop weblate-web weblate-celery 2>/dev/null || true
+  systemctl disable weblate-web weblate-celery 2>/dev/null || true
+}
+
+post_remove() {
+  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
+    set -- "${_DPKG_ARGV[@]}"
+  elif [ "$#" -eq 0 ]; then
+    set -- remove
+  fi
+
+  if [ -f /usr/share/dbconfig-common/dpkg/postrm.pgsql ]; then
+    . /usr/share/debconf/confmodule
+    . /usr/share/dbconfig-common/dpkg/postrm.pgsql
+    dbc_go weblate "$@"
+  fi
+}

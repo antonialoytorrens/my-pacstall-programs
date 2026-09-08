@@ -1,0 +1,25 @@
+[Unit]
+Description=GlitchTip web server (granian)
+After=network.target postgresql.service valkey-server.service
+Wants=postgresql.service valkey-server.service
+
+[Service]
+Type=simple
+User=glitchtip
+Group=glitchtip
+EnvironmentFile=/etc/glitchtip/glitchtip.env
+WorkingDirectory=/opt/glitchtip/src
+ExecStart=/bin/bash -c 'exec /opt/glitchtip/venv/bin/granian \
+  --interface asginl \
+  glitchtip.asgi:application \
+  --host 127.0.0.1 \
+  --port "${GLITCHTIP_HTTP_PORT}" \
+  --workers 1 \
+  --no-ws'
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

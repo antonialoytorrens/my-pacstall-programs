@@ -1,9 +1,0 @@
-pkgname="lbry-deb"
-gives="lbry"
-breaks=("${gives}" "${gives}-bin" "${gives}-git" "${gives}-app")
-arch=("amd64")
-pkgver="0.53.9"
-source=("https://github.com/lbryio/lbry-desktop/releases/download/v${pkgver}/LBRY_${pkgver}.deb")
-pkgdesc="A browser and wallet for LBRY, the decentralized, user-controlled content marketplace."
-sha256sums=("d3b2ea79abbfb2d930d945b2215c311b975e47ab87baa850db17521835e0a3e4")
-maintainer=("Madiator2011 <admin@madiator.com>")

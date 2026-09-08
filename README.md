@@ -1,69 +1,58 @@
-# Pacstall Programs
+# my-pacstall-programs
 
-This is the default repository of pacscripts which [pacstall](https://github.com/pacstall/pacstall) uses to install software. You can fork this repository and add make your own package repository as long as it follows the basic structure:
+Personal [pacstall](https://github.com/pacstall/pacstall) package repository and multi-arch `.deb` builder for:
 
-```monospace
-package-repository/
-├── packages/
-│   ├── example-package1/
-│   │   ├── example-package1.pacscript
-│   │   └── .SRCINFO
-│   └── example-package2/
-│       ├── example-package2.pacscript
-│       └── .SRCINFO
-├── scripts/
-│   ├── srcinfo.sh
-│   ├── custom-script1.sh
-│   └── custom-script2.sh
-├── distrolist
-├── packagelist
-└── srclist
+| Package | Architectures |
+|---------|---------------|
+| **gatus** | amd64, arm64, armhf |
+| **glitchtip** | amd64 |
+| **weblate** | amd64, arm64, armhf |
+| **wger** | amd64, arm64, armhf |
+
+Pacstall cannot build for a foreign architecture by itself. Builds run under Docker Buildx with `--platform` (native runners or QEMU).
+
+## Build locally
+
+```bash
+make help
+make gatus-amd64
+make glitchtip-amd64
+make weblate-arm64          # needs buildx + arm64 or QEMU
+make docker-wger-armhf      # kiwi-style: compose + DOCKER_PLATFORM
 ```
 
-You can then use the `pacstall -A` command to add a repository to your `pacstallrepo` list.
-Consult the manpage (run `man 8 pacstall` and `man 5 pacstall`) for more info.
+Foreign-arch builds need QEMU binfmt once:
 
-## How to setup the environment for pacscript development
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install all
+```
 
-If you need help making a pacscript, visit [our wiki](https://github.com/pacstall/pacstall/wiki/Pacscript-101).
+## CI / GitHub Releases
 
-This repository maintains a certain standard of commits. To ensure that your commits are up to the standard, we use [pre-commit](https://pre-commit.com/) hooks.
+Push to `master` builds changed packages (path filters) and publishes a **prerelease** per package. Tags are prefixed with the package name, e.g. `gatus-5.36.0-20260906120000`, so you can install/test from Releases before promoting to your apt repo.
 
-Here are the development dependencies that you need to install as a developer:
+A daily workflow deletes prereleases older than **30 days**.
 
-| Dependency | Purpose | How to install |
-|:-----------|:-------:|----------------|
-| [pre-commit](https://pre-commit.com/) | runs a series of formatting checks on git commits | `sudo pip install pre-commit` |
-| [shellcheck](https://www.shellcheck.net/) | checks for formatting and scripting issues | `pacstall -I shellcheck-bin` |
-| [shfmt](https://pkg.go.dev/mvdan.cc/sh/v3) | attempts to correct certain formatting issues | `pacstall -I shfmt-bin` |
-| [editor-config](https://editorconfig.org/#download) | ensures proper tabs when using a file editor | Install the plugin for your preferred editor |
+## reprepro
 
-After the dependencies are installed simply clone this repository, and use `pre-commit install` to install the pre-configured hooks to your cloned repository.
+After testing a prerelease, add each `.deb` to your reprepro repository. Architecture is taken from the package (`Architecture:`); there is no separate arch flag on `includedeb`:
 
-Now, whenever you try to commit a patch all the configured hooks will run and block/fix your code so that it adheres to or standards.
+```bash
+reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_amd64.deb
+reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_arm64.deb
+reprepro -b /path/to/repo includedeb <codename> ./gatus_5.36.0_armhf.deb
+reprepro -b /path/to/repo export
+```
 
-In case for some reason (false positives etc), you want to skip the hooks commit using `git commit --no-verify`
+Alternatively, `reprepro include <codename> foo.changes` if you have a `.changes` that lists several architectures.
 
-Additionally, we have created the following tools to improve package maintenance:
+## Layout
 
-| Maintainence Tool | Purpose | How to install |
-|:-----------------|:-------:|----------------|
-| [pacup](https://github.com/pacstall/pacup) | keep packages up to date | `pacstall -I pacup` (stable) or `pacstall -I pacup-git` (develop) |
-| [quality-assurance.sh](https://github.com/pacstall/pacstall/blob/master/misc/scripts/quality-assurance.sh) | test PRs before being merged | `pacstall -Qa` (built-in, pacstall) |
-| [srcinfo.sh](https://github.com/pacstall/pacstall-programs/blob/master/scripts/srcinfo.sh) | generate and read repo data | `./scripts/srcinfo.sh` (built-in, pacstall-programs) |
+```
+packages/<name>/     # pacscripts and packaging files (+ VERSION)
+docker/<name>/       # one Dockerfile per package
+Makefile             # multi-arch targets (kiwi-style docker-*)
+scripts/             # publish / version-check / prerelease cleanup
+```
 
-## License
-
-Pacstall programs are licensed under the MIT License.
-
-> [!NOTE]
-> MIT license does not apply to the packages built by Pacstall, merely to the
-> files in this repository (the pacscripts, GitHub Action workflows,
-> documentation, etc.). It also might not apply to patches included in pacscripts,
-> which may be derivative works of the packages to which they apply. The
-> aforementioned artifacts are all covered by the licenses of the respective
-> packages.
-
-## Stats
-
-<p align="center"><img alt="Repobeats analytics image" src="https://repobeats.axiom.co/api/embed/6339f9352d6dc27063ee90400da619442ee5143b.svg" /></p>
+Bump `packages/<name>/VERSION` and `pkgver` in the pacscript when updating.

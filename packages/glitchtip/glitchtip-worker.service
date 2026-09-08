@@ -1,0 +1,20 @@
+[Unit]
+Description=GlitchTip background worker
+After=network.target postgresql.service valkey-server.service glitchtip.service
+Wants=postgresql.service valkey-server.service
+
+[Service]
+Type=simple
+User=glitchtip
+Group=glitchtip
+EnvironmentFile=/etc/glitchtip/glitchtip.env
+Environment=IS_WORKER=true
+WorkingDirectory=/opt/glitchtip/src
+ExecStart=/opt/glitchtip/venv/bin/python manage.py runworker --scheduler
+Restart=on-failure
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

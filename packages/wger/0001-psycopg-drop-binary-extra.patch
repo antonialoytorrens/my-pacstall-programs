@@ -1,0 +1,11 @@
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -63,7 +63,7 @@
+     "openfoodfacts~=5.2.0",
+     "packaging~=26.2",
+     "pillow~=12.2.0",
+-    "psycopg[binary]~=3.3.2",
++    "psycopg~=3.3.2",
+     "reportlab~=4.5.0",
+     "requests~=2.34.0",
+     "tqdm~=4.68.1",

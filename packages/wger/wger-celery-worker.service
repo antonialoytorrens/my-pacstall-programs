@@ -1,0 +1,22 @@
+[Unit]
+Description=wger Celery worker
+After=network.target
+
+[Service]
+Type=simple
+User=wger
+Group=wger
+EnvironmentFile=/etc/wger/wger.env
+WorkingDirectory=/opt/wger/src
+ExecStart=/opt/wger/venv/bin/celery \
+  --app wger \
+  worker \
+  --loglevel=info \
+  --logfile=/var/log/wger/celery-worker.log
+Restart=on-failure
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

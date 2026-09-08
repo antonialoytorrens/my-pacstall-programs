@@ -1,0 +1,48 @@
+--- a/glitchtip/settings.py
++++ b/glitchtip/settings.py
+@@ -646,7 +646,6 @@
+ if DEBUG_TOOLBAR:
+     INSTALLED_APPS.append("debug_toolbar")
+ INSTALLED_APPS += [
+-    "storages",
+     "django_vtasks",
+     "glitchtip",
+     "apps.alerts",
+@@ -726,7 +725,10 @@
+ TEMPLATES = [
+     {
+         "BACKEND": "django.template.backends.django.DjangoTemplates",
+-        "DIRS": [path("dist"), path("templates")],
++        "DIRS": [
++            os.path.join(BASE_DIR, "dist"),
++            os.path.join(BASE_DIR, "templates"),
++        ],
+         "APP_DIRS": True,
+         "OPTIONS": {
+             "context_processors": [
+@@ -1154,17 +1156,18 @@
+ GS_PROJECT_ID = env("GS_PROJECT_ID")
+ 
+ if AWS_S3_ENDPOINT_URL:
+-    MEDIA_URL = env.str("MEDIA_URL", f"https://{AWS_S3_ENDPOINT_URL}/{AWS_LOCATION}/")
+-    STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
+-else:
+-    MEDIA_URL = "media/"
++    raise ImproperlyConfigured(
++        "Cloud object storage is not available in this package build. "
++        "Use local filesystem storage (MEDIA_ROOT)."
++    )
++MEDIA_URL = "media/"
+ MEDIA_ROOT = env.str("MEDIA_ROOT", "")
+ 
+ STATICFILES_DIRS = [
+-    "assets",
+-    "dist",
++    os.path.join(BASE_DIR, "assets"),
++    os.path.join(BASE_DIR, "dist"),
+ ]
+-STATIC_ROOT = path("static/")
++STATIC_ROOT = env.str("STATIC_ROOT", "/var/lib/glitchtip/static")
+ 
+ EMAIL_BACKEND = env.str(
+     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"

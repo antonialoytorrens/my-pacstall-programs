@@ -1,0 +1,30 @@
+[Unit]
+Description=Weblate Celery worker
+After=network.target postgresql.service valkey-server.service
+Requires=valkey-server.service
+
+[Service]
+Type=simple
+User=weblate
+Group=weblate
+EnvironmentFile=-/etc/weblate/weblate.env
+Environment=DJANGO_SETTINGS_MODULE=weblate_settings
+Environment=PYTHONPATH=/etc/weblate
+WorkingDirectory=/var/lib/weblate
+ExecStart=/opt/weblate/venv/bin/celery \
+  --app=weblate.utils.celery \
+  worker \
+  --beat \
+  --queues=celery,search,notify,memory,backup,translate \
+  --concurrency=1 \
+  --prefetch-multiplier=2 \
+  --max-tasks-per-child=500 \
+  --loglevel=info \
+  --logfile=/var/log/weblate/celery.log
+Restart=on-failure
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

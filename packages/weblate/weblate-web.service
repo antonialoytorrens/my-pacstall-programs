@@ -1,0 +1,39 @@
+[Unit]
+Description=Weblate web server (gunicorn)
+After=network.target postgresql.service valkey-server.service
+Requires=postgresql.service valkey-server.service
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=weblate
+Group=weblate
+EnvironmentFile=-/etc/weblate/weblate.env
+Environment=DJANGO_SETTINGS_MODULE=weblate_settings
+Environment=PYTHONPATH=/etc/weblate
+WorkingDirectory=/var/lib/weblate
+RuntimeDirectory=weblate
+ExecStart=/opt/weblate/venv/bin/gunicorn \
+  --bind "127.0.0.1:${WEBLATE_HTTP_PORT}" \
+  --workers 1 \
+  --worker-class gthread \
+  --threads 2 \
+  --max-requests 5000 \
+  --max-requests-jitter 500 \
+  --timeout 120 \
+  --graceful-timeout 30 \
+  --keep-alive 5 \
+  --access-logfile /var/log/weblate/access.log \
+  --error-logfile /var/log/weblate/error.log \
+  --capture-output \
+  --enable-stdio-inheritance \
+  weblate.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

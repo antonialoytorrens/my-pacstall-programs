@@ -1,0 +1,24 @@
+[Unit]
+Description=Gatus status page
+Documentation=https://gatus.io/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gatus
+Group=gatus
+WorkingDirectory=/var/lib/gatus
+Environment=GATUS_CONFIG_PATH=/etc/gatus/config.d
+Environment=GATUS_LOG_LEVEL=INFO
+ExecStart=/usr/bin/gatus
+Restart=on-failure
+RestartSec=5
+# ICMP / ping checks as non-root
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+[Unit]
+Description=wger web server (gunicorn)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=wger
+Group=wger
+EnvironmentFile=/etc/wger/wger.env
+WorkingDirectory=/opt/wger/src
+RuntimeDirectory=wger
+ExecStart=/bin/bash -c 'exec /usr/bin/gunicorn \
+  --preload \
+  --bind "127.0.0.1:${WGER_HTTP_PORT}" \
+  --workers 3 \
+  --worker-class gthread \
+  --threads 2 \
+  --timeout 240 \
+  --graceful-timeout 30 \
+  --keep-alive 5 \
+  --access-logfile /var/log/wger/access.log \
+  --error-logfile /var/log/wger/error.log \
+  --capture-output \
+  --enable-stdio-inheritance \
+  wger.wsgi:application'
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

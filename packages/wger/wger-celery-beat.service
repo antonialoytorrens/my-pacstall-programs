@@ -1,0 +1,23 @@
+[Unit]
+Description=wger Celery beat scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=wger
+Group=wger
+EnvironmentFile=/etc/wger/wger.env
+WorkingDirectory=/opt/wger/src
+ExecStart=/opt/wger/venv/bin/celery \
+  --app wger \
+  beat \
+  --loglevel=info \
+  --schedule /var/lib/wger/celerybeat-schedule \
+  --logfile=/var/log/wger/celery-beat.log
+Restart=on-failure
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

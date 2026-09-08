@@ -1,0 +1,88 @@
+import os
+from weblate.settings_example import *  # noqa: F401,F403
+
+SECRET_KEY = os.environ.get("WEBLATE_SECRET_KEY", "__SECRETKEY_PLACEHOLDER__")
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("WEBLATE_DB_NAME", "weblate"),
+        "USER": os.environ.get("WEBLATE_DB_USER", "weblate"),
+        "PASSWORD": os.environ.get("WEBLATE_DB_PASSWORD", ""),
+        "HOST": os.environ.get("WEBLATE_DB_HOST", ""),
+        "PORT": os.environ.get("WEBLATE_DB_PORT", ""),
+    }
+}
+
+_domain = os.environ.get("WEBLATE_DOMAIN", "@WEBLATE_DOMAIN@")
+ALLOWED_HOSTS = [_domain]
+SITE_DOMAIN = _domain
+
+DATA_DIR = "/var/lib/weblate"
+CACHE_DIR = "/var/cache/weblate"
+
+_valkey = os.environ.get("WEBLATE_VALKEY_URL", "redis://127.0.0.1:6379/0")
+CELERY_BROKER_URL = _valkey
+CELERY_RESULT_BACKEND = _valkey
+
+EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+DEFAULT_FROM_EMAIL = f"noreply@{_domain}"
+SERVER_EMAIL = f"noreply@{_domain}"
+
+REGISTRATION_OPEN = True
+REQUIRE_LOGIN = False
+
+AUTHENTICATION_BACKENDS = (
+    "social_core.backends.email.EmailAuth",
+    "weblate.accounts.auth.WeblateUserBackend",
+)
+
+# Default pipeline without mail_validation (needs a mail server).
+SOCIAL_AUTH_PIPELINE = (
+    "social_core.pipeline.social_auth.social_details",
+    "social_core.pipeline.social_auth.social_uid",
+    "social_core.pipeline.social_auth.auth_allowed",
+    "social_core.pipeline.social_auth.social_user",
+    "weblate.accounts.pipeline.store_params",
+    "weblate.accounts.pipeline.verify_open",
+    "social_core.pipeline.user.get_username",
+    "weblate.accounts.pipeline.require_email",
+    "weblate.accounts.pipeline.revoke_mail_code",
+    "weblate.accounts.pipeline.ensure_valid",
+    "weblate.accounts.pipeline.remove_account",
+    "social_core.pipeline.social_auth.associate_by_email",
+    "weblate.accounts.pipeline.reauthenticate",
+    "weblate.accounts.pipeline.verify_username",
+    "social_core.pipeline.user.create_user",
+    "social_core.pipeline.social_auth.associate_user",
+    "social_core.pipeline.social_auth.load_extra_data",
+    "weblate.accounts.pipeline.second_factor",
+    "weblate.accounts.pipeline.cleanup_next",
+    "weblate.accounts.pipeline.user_full_name",
+    "weblate.accounts.pipeline.store_email",
+    "weblate.accounts.pipeline.notify_connect",
+    "weblate.accounts.pipeline.handle_invite",
+    "weblate.accounts.pipeline.password_reset",
+)
+
+ENABLE_HTTPS = True
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+IP_BEHIND_REVERSE_PROXY = True
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+OTP_WEBAUTHN_RP_ID = _domain
+OTP_WEBAUTHN_RP_NAME = "Weblate"
+OTP_WEBAUTHN_ALLOWED_ORIGINS = [f"https://{_domain}"]
+
+CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'"]
+CSP_IMG_SRC = ["'self'", "data:"]
+CSP_CONNECT_SRC = ["'self'"]
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]
+CSP_FONT_SRC = ["'self'"]
+
+DEBUG = False

@@ -4,9 +4,11 @@ web:
   address: 127.0.0.1
   port: @GATUS_HTTP_PORT@
 
-endpoints:
-  - name: example
-    url: "https://example.org/"
-    interval: 5m
-    conditions:
-      - "[STATUS] == 200"
+endpoints: []
+
+# Example (see https://github.com/TwiN/gatus#configuration for more information)
+# - name: example
+#   url: "https://example.org/"
+#   interval: 5m
+#   conditions:
+#     - "[STATUS] == 200"

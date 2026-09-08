@@ -31,6 +31,7 @@ source=(
   "${pkgname}-${pkgver}.tar.gz::https://github.com/wger-project/wger/archive/refs/tags/${pkgver}.tar.gz"
   "0001-psycopg-drop-binary-extra.patch"
   "wger.env.in"
+  "wger.config.in"
   "wger.service"
   "wger-celery-worker.service"
   "wger-celery-beat.service"
@@ -164,25 +165,13 @@ package() {
   install -Dm644 "${srcdir}/wger.tmpfiles" \
     "${pkgdir}/usr/lib/tmpfiles.d/wger.conf"
 
-  mkdir -p "${pkgdir}/var/lib/wger/media"
-  mkdir -p "${pkgdir}/var/lib/wger/static"
-  mkdir -p "${pkgdir}/var/log/wger"
+  mkdir -p "${pkgdir}/var/lib/wger/media" "${pkgdir}/var/lib/wger/static" "${pkgdir}/var/log/wger"
 
   mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/wger/install"
   printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/wger/install/pgsql"
 
   mkdir -p "${pkgdir}/DEBIAN"
-  cat > "${pkgdir}/DEBIAN/config" << EOF
-#!/bin/sh
-set -e
-. /usr/share/debconf/confmodule
-if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
-  dbc_dbname="${_wger_db_name}"
-  dbc_dbuser="${_wger_db_user}"
-  . /usr/share/dbconfig-common/dpkg/config.pgsql
-  dbc_go wger "\$@"
-fi
-EOF
+  _render_in "${srcdir}/wger.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
 }
 
@@ -212,6 +201,7 @@ ensure_pg_role_db() {
 }
 
 post_install() {
+  set -e
   if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
     set -- "${_DPKG_ARGV[@]}"
   elif [ "$#" -eq 0 ]; then
@@ -262,17 +252,9 @@ post_install() {
     fi
   fi
 
-  if [ ! -f /usr/share/dbconfig-common/dpkg/postinst.pgsql ]; then
-    fancy_message error "dbconfig-pgsql is required but not installed."
-    exit 1
-  fi
   . /usr/share/dbconfig-common/dpkg/postinst.pgsql
   dbc_go "$pkg" "$@"
 
-  if [ ! -f /etc/dbconfig-common/${pkg}.conf ]; then
-    fancy_message error "dbconfig-common did not produce /etc/dbconfig-common/${pkg}.conf"
-    exit 1
-  fi
   # shellcheck disable=SC1091
   . /etc/dbconfig-common/${pkg}.conf
 
@@ -299,23 +281,23 @@ post_install() {
   local db_host="${dbc_dbserver:-127.0.0.1}"
   case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
 
+  local use_pw=1
   if [ "${dbc_install}" != "true" ]; then
     dbc_dbname="${dbc_dbname:-wger}"
     dbc_dbuser="${dbc_dbuser:-wger}"
-    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-    write_db_env 0
+    use_pw=0
   else
     case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
-      ident:local|ident:|ident:localhost|ident:127.0.0.1)
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-        write_db_env 0
-        ;;
-      *)
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
-        write_db_env 1
-        ;;
+      ident:local|ident:|ident:localhost|ident:127.0.0.1) use_pw=0 ;;
     esac
   fi
+
+  if [ "${use_pw}" = "1" ]; then
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
+  else
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+  fi
+  write_db_env "${use_pw}"
 
   chmod 640 "$env_file"
   chown root:wger "$env_file"

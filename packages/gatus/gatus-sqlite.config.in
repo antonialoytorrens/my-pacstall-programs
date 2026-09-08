@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+if [ -f /usr/share/dbconfig-common/dpkg/config.sqlite3 ]; then
+  dbc_dbname="@GATUS_DB_NAME@"
+  . /usr/share/dbconfig-common/dpkg/config.sqlite3
+  dbc_go gatus-sqlite "$@"
+fi

@@ -30,6 +30,7 @@ source=(
   "0002-local-filesystem-profile.patch"
   "0003-deb-database-components.patch"
   "glitchtip.env.in"
+  "glitchtip.config.in"
   "glitchtip.service"
   "glitchtip-worker.service"
   "requirements.txt"
@@ -125,25 +126,13 @@ package() {
   install -Dm644 "${srcdir}/glitchtip-worker.service" \
     "${pkgdir}/usr/lib/systemd/system/glitchtip-worker.service"
 
-  mkdir -p "${pkgdir}/var/lib/glitchtip/uploads"
-  mkdir -p "${pkgdir}/var/lib/glitchtip/static"
-  mkdir -p "${pkgdir}/var/log/glitchtip"
+  mkdir -p "${pkgdir}/var/lib/glitchtip/uploads" "${pkgdir}/var/lib/glitchtip/static" "${pkgdir}/var/log/glitchtip"
 
   mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/glitchtip/install"
   printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/glitchtip/install/pgsql"
 
   mkdir -p "${pkgdir}/DEBIAN"
-  cat > "${pkgdir}/DEBIAN/config" << EOF
-#!/bin/sh
-set -e
-. /usr/share/debconf/confmodule
-if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
-  dbc_dbname="${_glitchtip_db_name}"
-  dbc_dbuser="${_glitchtip_db_user}"
-  . /usr/share/dbconfig-common/dpkg/config.pgsql
-  dbc_go glitchtip "\$@"
-fi
-EOF
+  _render_in "${srcdir}/glitchtip.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
 }
 
@@ -173,6 +162,7 @@ ensure_pg_role_db() {
 }
 
 post_install() {
+  set -e
   if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
     set -- "${_DPKG_ARGV[@]}"
   elif [ "$#" -eq 0 ]; then
@@ -209,17 +199,9 @@ post_install() {
     sed -i "s|__SECRETKEY_PLACEHOLDER__|${secret}|" "$env_file"
   fi
 
-  if [ ! -f /usr/share/dbconfig-common/dpkg/postinst.pgsql ]; then
-    fancy_message error "dbconfig-pgsql is required but not installed."
-    exit 1
-  fi
   . /usr/share/dbconfig-common/dpkg/postinst.pgsql
   dbc_go "$pkg" "$@"
 
-  if [ ! -f /etc/dbconfig-common/${pkg}.conf ]; then
-    fancy_message error "dbconfig-common did not produce /etc/dbconfig-common/${pkg}.conf"
-    exit 1
-  fi
   # shellcheck disable=SC1091
   . /etc/dbconfig-common/${pkg}.conf
 
@@ -243,39 +225,26 @@ post_install() {
   local db_host="${dbc_dbserver:-127.0.0.1}"
   case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
 
+  local use_pw=1
   if [ "${dbc_install}" != "true" ]; then
     dbc_dbname="${dbc_dbname:-glitchtip}"
     dbc_dbuser="${dbc_dbuser:-glitchtip}"
-    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-    write_db_env 0
+    use_pw=0
   else
     case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
-      ident:local|ident:|ident:localhost|ident:127.0.0.1)
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-        write_db_env 0
-        ;;
-      *)
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
-        write_db_env 1
-        ;;
+      ident:local|ident:|ident:localhost|ident:127.0.0.1) use_pw=0 ;;
     esac
   fi
 
+  if [ "${use_pw}" = "1" ]; then
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
+  else
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+  fi
+  write_db_env "${use_pw}"
+
   chmod 640 "$env_file"
   chown root:glitchtip "$env_file"
-
-  # verify DB connectivity
-  if ! run_as_glitchtip "$venv/bin/python" -c "
-import os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'glitchtip.settings')
-import django
-django.setup()
-from django.db import connection
-connection.ensure_connection()
-"; then
-    fancy_message error "Cannot connect to PostgreSQL as '${dbc_dbuser}'. Check /etc/glitchtip/glitchtip.env and pg_hba.conf."
-    exit 1
-  fi
 
   run_as_glitchtip "$venv/bin/python" "$src/manage.py" migrate --no-input
   run_as_glitchtip "$venv/bin/python" "$src/manage.py" maintain_partitions || true

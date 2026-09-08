@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
+  dbc_dbname="@GLITCHTIP_DB_NAME@"
+  dbc_dbuser="@GLITCHTIP_DB_USER@"
+  . /usr/share/dbconfig-common/dpkg/config.pgsql
+  dbc_go glitchtip "$@"
+fi

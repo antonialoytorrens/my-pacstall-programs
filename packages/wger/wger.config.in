@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
+  dbc_dbname="@WGER_DB_NAME@"
+  dbc_dbuser="@WGER_DB_USER@"
+  . /usr/share/dbconfig-common/dpkg/config.pgsql
+  dbc_go wger "$@"
+fi

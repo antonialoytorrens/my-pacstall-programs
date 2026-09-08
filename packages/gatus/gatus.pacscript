@@ -1,7 +1,7 @@
 pkgbase="gatus"
 pkgname=("gatus" "gatus-pgsql" "gatus-sqlite")
 pkgver="5.36.0"
-pkgrel="2"
+pkgrel="3"
 arch=('amd64' 'arm64' 'armhf')
 url="https://gatus.io/"
 license=('Apache-2.0')
@@ -20,6 +20,9 @@ source=(
   "https://github.com/TwiN/gatus/archive/refs/tags/v${pkgver}.tar.gz"
   "gatus.service"
   "00-main.yaml.in"
+  "gatus-pgsql.config.in"
+  "gatus-sqlite.config.in"
+  "pgsql.conf"
 )
 
 makedepends+=(
@@ -40,6 +43,13 @@ build() {
   go build -trimpath -ldflags="-s -w" -o gatus .
 }
 
+_render_in() {
+  sed -e "s|@GATUS_HTTP_PORT@|${_gatus_http_port}|g" \
+      -e "s|@GATUS_DB_NAME@|${_gatus_db_name}|g" \
+      -e "s|@GATUS_DB_USER@|${_gatus_db_user}|g" \
+      "${1}" > "${2}"
+}
+
 package_gatus() {
   depends=("ca-certificates" "systemd" "gatus-pgsql | gatus-sqlite | dbconfig-no-thanks")
   backup=('etc/gatus/config.d/00-main.yaml')
@@ -48,9 +58,8 @@ package_gatus() {
   install -Dm755 "${srcdir}/gatus-${pkgver}/gatus" \
     "${pkgdir}/usr/bin/gatus"
 
-  install -Dm644 "${srcdir}/00-main.yaml.in" \
-    "${pkgdir}/etc/gatus/config.d/00-main.yaml"
-  sed -i "s|@GATUS_HTTP_PORT@|${_gatus_http_port}|g" \
+  mkdir -p "${pkgdir}/etc/gatus/config.d"
+  _render_in "${srcdir}/00-main.yaml.in" \
     "${pkgdir}/etc/gatus/config.d/00-main.yaml"
 
   install -Dm644 "${srcdir}/gatus.service" \
@@ -71,25 +80,11 @@ package_gatus-pgsql() {
   mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/gatus-pgsql/install"
   printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/gatus-pgsql/install/pgsql"
 
-  mkdir -p "${pkgdir}/usr/lib/systemd/system/gatus.service.d"
-  cat > "${pkgdir}/usr/lib/systemd/system/gatus.service.d/pgsql.conf" << 'EOF'
-[Unit]
-After=postgresql.service
-Wants=postgresql.service
-EOF
+  install -Dm644 "${srcdir}/pgsql.conf" \
+    "${pkgdir}/usr/lib/systemd/system/gatus.service.d/pgsql.conf"
 
   mkdir -p "${pkgdir}/DEBIAN"
-  cat > "${pkgdir}/DEBIAN/config" << EOF
-#!/bin/sh
-set -e
-. /usr/share/debconf/confmodule
-if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
-  dbc_dbname="${_gatus_db_name}"
-  dbc_dbuser="${_gatus_db_user}"
-  . /usr/share/dbconfig-common/dpkg/config.pgsql
-  dbc_go gatus-pgsql "\$@"
-fi
-EOF
+  _render_in "${srcdir}/gatus-pgsql.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
 }
 
@@ -106,16 +101,7 @@ package_gatus-sqlite() {
   printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/gatus-sqlite/install/sqlite3"
 
   mkdir -p "${pkgdir}/DEBIAN"
-  cat > "${pkgdir}/DEBIAN/config" << EOF
-#!/bin/sh
-set -e
-. /usr/share/debconf/confmodule
-if [ -f /usr/share/dbconfig-common/dpkg/config.sqlite3 ]; then
-  dbc_dbname="${_gatus_db_name}"
-  . /usr/share/dbconfig-common/dpkg/config.sqlite3
-  dbc_go gatus-sqlite "\$@"
-fi
-EOF
+  _render_in "${srcdir}/gatus-sqlite.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
 }
 
@@ -184,6 +170,7 @@ ensure_pg_role_db() {
 }
 
 post_install() {
+  set -e
   if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
     set -- "${_DPKG_ARGV[@]}"
   elif [ "$#" -eq 0 ]; then
@@ -205,17 +192,9 @@ post_install() {
     gatus-pgsql)
       _gatus_ensure_user
       . /usr/share/debconf/confmodule
-      if [ ! -f /usr/share/dbconfig-common/dpkg/postinst.pgsql ]; then
-        fancy_message error "dbconfig-pgsql is required but not installed."
-        exit 1
-      fi
       . /usr/share/dbconfig-common/dpkg/postinst.pgsql
       dbc_go gatus-pgsql "$@"
 
-      if [ ! -f /etc/dbconfig-common/gatus-pgsql.conf ]; then
-        fancy_message error "dbconfig-common did not produce /etc/dbconfig-common/gatus-pgsql.conf"
-        exit 1
-      fi
       # shellcheck disable=SC1091
       . /etc/dbconfig-common/gatus-pgsql.conf
 
@@ -223,24 +202,25 @@ post_install() {
       case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
       local storage_path=""
 
+      local use_pw=1
       if [ "${dbc_install}" != "true" ]; then
         dbc_dbname="${dbc_dbname:-gatus}"
         dbc_dbuser="${dbc_dbuser:-gatus}"
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-        storage_path="postgres://${dbc_dbuser}@/${dbc_dbname}?host=/var/run/postgresql"
+        use_pw=0
       else
         case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
-          ident:local|ident:|ident:localhost|ident:127.0.0.1)
-            ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-            storage_path="postgres://${dbc_dbuser}@/${dbc_dbname}?host=/var/run/postgresql"
-            ;;
-          *)
-            ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
-            local enc_pass
-            enc_pass="$(printf '%s' "${dbc_dbpass}" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')"
-            storage_path="postgres://${dbc_dbuser}:${enc_pass}@${db_host}:${dbc_dbport:-5432}/${dbc_dbname}?sslmode=disable"
-            ;;
+          ident:local|ident:|ident:localhost|ident:127.0.0.1) use_pw=0 ;;
         esac
+      fi
+
+      if [ "${use_pw}" = "1" ]; then
+        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
+        local enc_pass
+        enc_pass="$(printf '%s' "${dbc_dbpass}" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))')"
+        storage_path="postgres://${dbc_dbuser}:${enc_pass}@${db_host}:${dbc_dbport:-5432}/${dbc_dbname}?sslmode=disable"
+      else
+        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+        storage_path="postgres://${dbc_dbuser}@/${dbc_dbname}?host=/var/run/postgresql"
       fi
 
       _gatus_write_storage_yaml postgres "${storage_path}"
@@ -251,10 +231,6 @@ post_install() {
     gatus-sqlite)
       _gatus_ensure_user
       . /usr/share/debconf/confmodule
-      if [ ! -f /usr/share/dbconfig-common/dpkg/postinst.sqlite3 ]; then
-        fancy_message error "dbconfig-sqlite3 is required but not installed."
-        exit 1
-      fi
       . /usr/share/dbconfig-common/dpkg/postinst.sqlite3
       dbc_go gatus-sqlite "$@"
 

@@ -1,6 +1,6 @@
 pkgname="weblate"
 pkgver="2026.7.1"
-pkgrel="1"
+pkgrel="2"
 arch=('amd64' 'arm64' 'armhf')
 url="https://weblate.org/"
 license=('GPL-3.0-or-later')
@@ -13,7 +13,6 @@ _weblate_db_name="weblate"
 _weblate_db_user="weblate"
 _weblate_http_port="38447"
 _install_prefix="/opt/weblate"
-_python="python3.13"
 _psycopg_c_ver="3.3.4"
 
 # Pacstall calls hooks with no args; dpkg argv is available at top-level when embedded.
@@ -23,6 +22,7 @@ source=(
   "https://files.pythonhosted.org/packages/07/40/1367940d6615d61df263b88a3c661c39b30f1b2611029724e42c7c0c2435/weblate-${pkgver}.tar.gz"
   "weblate.env.in"
   "weblate_settings.py.in"
+  "weblate.config.in"
   "weblate-web.service"
   "weblate-celery.service"
   "weblate.tmpfiles"
@@ -68,7 +68,7 @@ build() {
   local staging="${srcdir}/staging"
   local venv="${staging}${_install_prefix}/venv"
   mkdir -p "${venv}"
-  "${_python}" -m venv "${venv}"
+  python3 -m venv "${venv}"
   "${venv}/bin/pip" install -q --no-cache-dir --upgrade pip setuptools wheel
 
   "${venv}/bin/pip" install -q --no-cache-dir --no-binary psycopg-c \
@@ -125,25 +125,13 @@ package() {
   install -Dm644 "${srcdir}/weblate.tmpfiles" \
     "${pkgdir}/usr/lib/tmpfiles.d/weblate.conf"
 
-  mkdir -p "${pkgdir}/var/lib/weblate"
-  mkdir -p "${pkgdir}/var/cache/weblate"
-  mkdir -p "${pkgdir}/var/log/weblate"
+  mkdir -p "${pkgdir}/var/lib/weblate" "${pkgdir}/var/cache/weblate" "${pkgdir}/var/log/weblate"
 
   mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/weblate/install"
   printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/weblate/install/pgsql"
 
   mkdir -p "${pkgdir}/DEBIAN"
-  cat > "${pkgdir}/DEBIAN/config" << EOF
-#!/bin/sh
-set -e
-. /usr/share/debconf/confmodule
-if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
-  dbc_dbname="${_weblate_db_name}"
-  dbc_dbuser="${_weblate_db_user}"
-  . /usr/share/dbconfig-common/dpkg/config.pgsql
-  dbc_go weblate "\$@"
-fi
-EOF
+  _render_in "${srcdir}/weblate.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
 }
 
@@ -172,7 +160,12 @@ ensure_pg_role_db() {
     || runuser -u postgres -- createdb -O "${role}" "${dbname}"
 }
 
+_shell_quote() {
+  printf "%s" "$1" | sed "s/'/'\\\\''/g"
+}
+
 post_install() {
+  set -e
   if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
     set -- "${_DPKG_ARGV[@]}"
   elif [ "$#" -eq 0 ]; then
@@ -209,24 +202,16 @@ post_install() {
     ' bash "$env_file" "$@"
   }
 
+  # Alphanumeric only — safe for bash source and systemd EnvironmentFile.
   if grep -q '__SECRETKEY_PLACEHOLDER__' "$env_file"; then
     local secret
-    secret=$("${venv}/bin/weblate-generate-secret-key" 2>/dev/null || \
-      "${venv}/bin/python" -c "import secrets; print(secrets.token_urlsafe(50))")
+    secret=$("${venv}/bin/python" -c "import secrets; print(secrets.token_hex(32))")
     sed -i "s|__SECRETKEY_PLACEHOLDER__|${secret}|" "$env_file"
   fi
 
-  if [ ! -f /usr/share/dbconfig-common/dpkg/postinst.pgsql ]; then
-    fancy_message error "dbconfig-pgsql is required but not installed."
-    exit 1
-  fi
   . /usr/share/dbconfig-common/dpkg/postinst.pgsql
   dbc_go "$pkg" "$@"
 
-  if [ ! -f /etc/dbconfig-common/${pkg}.conf ]; then
-    fancy_message error "dbconfig-common did not produce /etc/dbconfig-common/${pkg}.conf"
-    exit 1
-  fi
   # shellcheck disable=SC1091
   . /etc/dbconfig-common/${pkg}.conf
 
@@ -236,12 +221,12 @@ post_install() {
       "$env_file" > "${env_file}.tmp"
     {
       cat "${env_file}.tmp"
-      echo "WEBLATE_DB_NAME=${dbc_dbname}"
-      echo "WEBLATE_DB_USER=${dbc_dbuser}"
+      echo "WEBLATE_DB_NAME='$(_shell_quote "${dbc_dbname}")'"
+      echo "WEBLATE_DB_USER='$(_shell_quote "${dbc_dbuser}")'"
       if [ "${use_password}" = "1" ]; then
-        echo "WEBLATE_DB_PASSWORD=${dbc_dbpass}"
-        echo "WEBLATE_DB_HOST=${db_host}"
-        echo "WEBLATE_DB_PORT=${dbc_dbport:-5432}"
+        echo "WEBLATE_DB_PASSWORD='$(_shell_quote "${dbc_dbpass}")'"
+        echo "WEBLATE_DB_HOST='$(_shell_quote "${db_host}")'"
+        echo "WEBLATE_DB_PORT='$(_shell_quote "${dbc_dbport:-5432}")'"
       else
         echo "WEBLATE_DB_PASSWORD="
         echo "WEBLATE_DB_HOST="
@@ -254,56 +239,32 @@ post_install() {
   local db_host="${dbc_dbserver:-127.0.0.1}"
   case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
 
+  local use_pw=1
   if [ "${dbc_install}" != "true" ]; then
     dbc_dbname="${dbc_dbname:-weblate}"
     dbc_dbuser="${dbc_dbuser:-weblate}"
-    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-    write_db_env 0
+    use_pw=0
   else
     case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
-      ident:local|ident:|ident:localhost|ident:127.0.0.1)
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-        write_db_env 0
-        ;;
-      *)
-        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
-        write_db_env 1
-        ;;
+      ident:local|ident:|ident:localhost|ident:127.0.0.1) use_pw=0 ;;
     esac
   fi
 
+  if [ "${use_pw}" = "1" ]; then
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
+  else
+    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+  fi
+  write_db_env "${use_pw}"
+
   chmod 640 "$env_file" "$settings"
   chown root:weblate "$env_file" "$settings"
-
-  # verify DB connectivity
-  if ! run_as_weblate "$weblate_bin" shell -c \
-      "from django.db import connection; connection.ensure_connection()"; then
-    fancy_message error "Cannot connect to PostgreSQL as '${dbc_dbuser}'. Check /etc/weblate/weblate.env and pg_hba.conf."
-    exit 1
-  fi
 
   run_as_weblate "$weblate_bin" migrate --noinput
   run_as_weblate "$weblate_bin" compress --force 2>/dev/null || true
   run_as_weblate "$weblate_bin" collectstatic --noinput --clear 2>/dev/null || true
 
-  local admin_exists
-  admin_exists=$(run_as_weblate "$weblate_bin" shell -c \
-    "from weblate.auth.models import User; print(User.objects.filter(is_superuser=True).exists())" \
-    2>/dev/null || echo "False")
-
-  if [ "${admin_exists}" != "True" ]; then
-    local admin_pass admin_email
-    admin_pass=$("${venv}/bin/python" -c "import secrets; print(secrets.token_urlsafe(16))")
-    # shellcheck disable=SC1091
-    set -a; source "$env_file"; set +a
-    admin_email="${WEBLATE_ADMIN_EMAIL:-admin@localhost}"
-    run_as_weblate "$weblate_bin" createadmin \
-      --username admin \
-      --email "${admin_email}" \
-      --password "${admin_pass}" \
-      --no-color 2>/dev/null || true
-    fancy_message warn "Admin account created — username: admin — password: ${admin_pass} — SAVE THIS; it will not be shown again."
-  fi
+  # No default admin — registration is open; first user signs up in the UI.
 
   chmod 750 /var/lib/weblate
   systemd-tmpfiles --create /usr/lib/tmpfiles.d/weblate.conf 2>/dev/null || true
@@ -341,5 +302,15 @@ post_remove() {
     . /usr/share/debconf/confmodule
     . /usr/share/dbconfig-common/dpkg/postrm.pgsql
     dbc_go weblate "$@"
+  fi
+
+  if [ "$1" = "purge" ]; then
+    if [ -L /home/weblate ]; then
+      case "$(readlink /home/weblate)" in
+        /var/lib/weblate) rm -f /home/weblate ;;
+      esac
+    fi
+    rm -rf /opt/weblate
+    rm -rf /var/log/weblate /var/cache/weblate /var/lib/weblate
   fi
 }

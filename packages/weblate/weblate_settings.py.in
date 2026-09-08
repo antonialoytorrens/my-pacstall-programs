@@ -1,36 +1,89 @@
 import os
 from weblate.settings_example import *  # noqa: F401,F403
 
-SECRET_KEY = os.environ.get("WEBLATE_SECRET_KEY", "__SECRETKEY_PLACEHOLDER__")
+
+def _env(name, default=""):
+    return os.environ.get(name, default)
+
+
+def _env_bool(name, default=False):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _env_list(name, default=None):
+    raw = os.environ.get(name, "")
+    if not raw.strip():
+        return list(default or [])
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _env_csp(name, default):
+    raw = os.environ.get(name, "")
+    if not raw.strip():
+        return list(default)
+    return list(default) + [item.strip() for item in raw.split() if item.strip()]
+
+
+SECRET_KEY = _env("WEBLATE_SECRET_KEY", "__SECRETKEY_PLACEHOLDER__")
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("WEBLATE_DB_NAME", "weblate"),
-        "USER": os.environ.get("WEBLATE_DB_USER", "weblate"),
-        "PASSWORD": os.environ.get("WEBLATE_DB_PASSWORD", ""),
-        "HOST": os.environ.get("WEBLATE_DB_HOST", ""),
-        "PORT": os.environ.get("WEBLATE_DB_PORT", ""),
+        "NAME": _env("WEBLATE_DB_NAME", "weblate"),
+        "USER": _env("WEBLATE_DB_USER", "weblate"),
+        "PASSWORD": _env("WEBLATE_DB_PASSWORD", ""),
+        "HOST": _env("WEBLATE_DB_HOST", ""),
+        "PORT": _env("WEBLATE_DB_PORT", ""),
     }
 }
 
-_domain = os.environ.get("WEBLATE_DOMAIN", "@WEBLATE_DOMAIN@")
-ALLOWED_HOSTS = [_domain]
+_domain = _env("WEBLATE_DOMAIN", "@WEBLATE_DOMAIN@")
 SITE_DOMAIN = _domain
+SITE_TITLE = _env("WEBLATE_SITE_TITLE", "Weblate")
+
+_allowed = _env_list("WEBLATE_ALLOWED_HOSTS")
+ALLOWED_HOSTS = list(dict.fromkeys([_domain, *_allowed]))
 
 DATA_DIR = "/var/lib/weblate"
 CACHE_DIR = "/var/cache/weblate"
 
-_valkey = os.environ.get("WEBLATE_VALKEY_URL", "redis://127.0.0.1:6379/0")
+_valkey = _env("WEBLATE_VALKEY_URL", "redis://127.0.0.1:6379/0")
 CELERY_BROKER_URL = _valkey
 CELERY_RESULT_BACKEND = _valkey
 
-EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
-DEFAULT_FROM_EMAIL = f"noreply@{_domain}"
-SERVER_EMAIL = f"noreply@{_domain}"
+TIME_ZONE = _env("WEBLATE_TIME_ZONE", "UTC")
 
-REGISTRATION_OPEN = True
-REQUIRE_LOGIN = False
+DEBUG = _env_bool("WEBLATE_DEBUG", False)
+if "WEBLATE_LOGLEVEL" in os.environ:
+    try:
+        LOGGING["loggers"]["weblate"]["level"] = _env("WEBLATE_LOGLEVEL", "INFO")
+    except (NameError, KeyError, TypeError):
+        pass
+
+_admin_name = _env("WEBLATE_ADMIN_NAME", "Weblate Admin")
+_admin_email = _env("WEBLATE_ADMIN_EMAIL", "")
+if _admin_email:
+    ADMINS = ((_admin_name, _admin_email),)
+
+EMAIL_BACKEND = _env(
+    "WEBLATE_EMAIL_BACKEND",
+    "django.core.mail.backends.dummy.EmailBackend",
+)
+EMAIL_HOST = _env("WEBLATE_EMAIL_HOST", "")
+EMAIL_PORT = int(_env("WEBLATE_EMAIL_PORT", "587") or "587")
+EMAIL_HOST_USER = _env("WEBLATE_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = _env("WEBLATE_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _env_bool("WEBLATE_EMAIL_USE_TLS", True)
+EMAIL_USE_SSL = _env_bool("WEBLATE_EMAIL_USE_SSL", False)
+DEFAULT_FROM_EMAIL = _env("WEBLATE_DEFAULT_FROM_EMAIL", f"noreply@{_domain}")
+SERVER_EMAIL = _env("WEBLATE_SERVER_EMAIL", f"noreply@{_domain}")
+
+REGISTRATION_OPEN = _env_bool("WEBLATE_REGISTRATION_OPEN", True)
+REGISTRATION_CAPTCHA = _env_bool("WEBLATE_REGISTRATION_CAPTCHA", True)
+REQUIRE_LOGIN = _env_bool("WEBLATE_REQUIRE_LOGIN", False)
 
 AUTHENTICATION_BACKENDS = (
     "social_core.backends.email.EmailAuth",
@@ -65,24 +118,37 @@ SOCIAL_AUTH_PIPELINE = (
     "weblate.accounts.pipeline.password_reset",
 )
 
-ENABLE_HTTPS = True
-SECURE_SSL_REDIRECT = False
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+ENABLE_HTTPS = _env_bool("WEBLATE_ENABLE_HTTPS", True)
+SECURE_SSL_REDIRECT = _env_bool("WEBLATE_SECURE_SSL_REDIRECT", False)
+SESSION_COOKIE_SECURE = ENABLE_HTTPS
+CSRF_COOKIE_SECURE = ENABLE_HTTPS
+
+_proxy_ssl = _env("WEBLATE_SECURE_PROXY_SSL_HEADER", "HTTP_X_FORWARDED_PROTO,https")
+_proxy_parts = [part.strip() for part in _proxy_ssl.split(",", 1)]
+if len(_proxy_parts) == 2:
+    SECURE_PROXY_SSL_HEADER = (_proxy_parts[0], _proxy_parts[1])
+
 IP_BEHIND_REVERSE_PROXY = True
-SECURE_HSTS_SECONDS = 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+if "WEBLATE_IP_PROXY_HEADER" in os.environ:
+    IP_PROXY_HEADER = _env("WEBLATE_IP_PROXY_HEADER")
+
+SECURE_HSTS_SECONDS = 31536000 if ENABLE_HTTPS else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = ENABLE_HTTPS
+SECURE_HSTS_PRELOAD = ENABLE_HTTPS
 
 OTP_WEBAUTHN_RP_ID = _domain
-OTP_WEBAUTHN_RP_NAME = "Weblate"
+OTP_WEBAUTHN_RP_NAME = SITE_TITLE
 OTP_WEBAUTHN_ALLOWED_ORIGINS = [f"https://{_domain}"]
 
-CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'"]
-CSP_IMG_SRC = ["'self'", "data:"]
-CSP_CONNECT_SRC = ["'self'"]
-CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]
-CSP_FONT_SRC = ["'self'"]
+CSP_SCRIPT_SRC = _env_csp("WEBLATE_CSP_SCRIPT_SRC", ["'self'", "'unsafe-inline'"])
+CSP_IMG_SRC = _env_csp("WEBLATE_CSP_IMG_SRC", ["'self'", "data:"])
+CSP_CONNECT_SRC = _env_csp("WEBLATE_CSP_CONNECT_SRC", ["'self'"])
+CSP_STYLE_SRC = _env_csp("WEBLATE_CSP_STYLE_SRC", ["'self'", "'unsafe-inline'"])
+CSP_FONT_SRC = _env_csp("WEBLATE_CSP_FONT_SRC", ["'self'"])
 
-DEBUG = False
+if "WEBLATE_RATELIMIT_ATTEMPTS" in os.environ:
+    RATELIMIT_ATTEMPTS = int(_env("WEBLATE_RATELIMIT_ATTEMPTS", "5"))
+if "WEBLATE_RATELIMIT_LOCKOUT" in os.environ:
+    RATELIMIT_LOCKOUT = int(_env("WEBLATE_RATELIMIT_LOCKOUT", "300"))
+if "WEBLATE_RATELIMIT_WINDOW" in os.environ:
+    RATELIMIT_WINDOW = int(_env("WEBLATE_RATELIMIT_WINDOW", "300"))

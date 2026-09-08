@@ -1,6 +1,6 @@
 pkgname="weblate"
 pkgver="2026.7.1"
-pkgrel="3"
+pkgrel="4"
 arch=('amd64' 'arm64' 'armhf')
 url="https://weblate.org/"
 license=('GPL-3.0-or-later')
@@ -266,7 +266,15 @@ post_install() {
 
   # No default admin — registration is open; first user signs up in the UI.
 
+  # DATA_DIR stays private; nginx (www-data) needs group traverse + read for STATIC_ROOT.
   chmod 750 /var/lib/weblate
+  mkdir -p /var/lib/weblate/static
+  chmod 750 /var/lib/weblate/static
+  chown -R weblate:weblate /var/lib/weblate/static
+  if id -u www-data &>/dev/null; then
+    usermod -aG weblate www-data
+  fi
+
   systemd-tmpfiles --create /usr/lib/tmpfiles.d/weblate.conf 2>/dev/null || true
 
   systemctl daemon-reload

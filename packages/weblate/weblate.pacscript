@@ -1,6 +1,6 @@
 pkgname="weblate"
 pkgver="2026.7.1"
-pkgrel="2"
+pkgrel="3"
 arch=('amd64' 'arm64' 'armhf')
 url="https://weblate.org/"
 license=('GPL-3.0-or-later')
@@ -261,8 +261,8 @@ post_install() {
   chown root:weblate "$env_file" "$settings"
 
   run_as_weblate "$weblate_bin" migrate --noinput
-  run_as_weblate "$weblate_bin" compress --force 2>/dev/null || true
-  run_as_weblate "$weblate_bin" collectstatic --noinput --clear 2>/dev/null || true
+  run_as_weblate "$weblate_bin" collectstatic --noinput --clear
+  run_as_weblate "$weblate_bin" compress --force
 
   # No default admin — registration is open; first user signs up in the UI.
 

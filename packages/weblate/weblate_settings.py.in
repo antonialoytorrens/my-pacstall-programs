@@ -49,6 +49,10 @@ ALLOWED_HOSTS = list(dict.fromkeys([_domain, *_allowed]))
 
 DATA_DIR = "/var/lib/weblate"
 CACHE_DIR = "/var/cache/weblate"
+# Recompute paths frozen by settings_example at import time.
+MEDIA_ROOT = os.path.join(DATA_DIR, "media")
+STATIC_ROOT = os.path.join(CACHE_DIR, "static")
+CACHES["avatar"]["LOCATION"] = os.path.join(CACHE_DIR, "avatar")
 
 _valkey = _env("WEBLATE_VALKEY_URL", "redis://127.0.0.1:6379/0")
 CELERY_BROKER_URL = _valkey

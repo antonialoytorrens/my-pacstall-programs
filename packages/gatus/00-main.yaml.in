@@ -1,14 +1,12 @@
-# Packaged defaults — edit and restart: systemctl restart gatus
-# Storage comes from gatus-pgsql / gatus-sqlite (10-storage.yaml), or memory if neither.
+# Example (see https://github.com/TwiN/gatus#configuration for more information)
 web:
   address: 127.0.0.1
   port: @GATUS_HTTP_PORT@
 
-endpoints: []
+endpoints:
+  - name: gatus-web-interface
+    url: "http://127.0.0.1:@GATUS_HTTP_PORT@"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
 
-# Example (see https://github.com/TwiN/gatus#configuration for more information)
-# - name: example
-#   url: "https://example.org/"
-#   interval: 5m
-#   conditions:
-#     - "[STATUS] == 200"

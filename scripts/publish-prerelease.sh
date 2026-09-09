@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Publish a GitHub prerelease for one package (PACKAGE=gatus|glitchtip|weblate|wger).
+# Publish a GitHub prerelease for one package (PACKAGE=gatus|glitchtip|weblate|wger|fail2ban-ui).
 # Tag/title use the package name prefix so Releases stay distinguishable in the monorepo.
 set -euo pipefail
 
 : "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
-: "${PACKAGE:?PACKAGE is required (gatus|glitchtip|weblate|wger)}"
+: "${PACKAGE:?PACKAGE is required (gatus|glitchtip|weblate|wger|fail2ban-ui)}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="${REPO_ROOT}/packages/${PACKAGE}/VERSION"

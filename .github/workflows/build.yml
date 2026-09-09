@@ -16,6 +16,7 @@ on:
           - glitchtip
           - weblate
           - wger
+          - fail2ban-ui
 
 permissions:
   contents: write
@@ -28,6 +29,7 @@ jobs:
       glitchtip: ${{ steps.set.outputs.glitchtip }}
       weblate: ${{ steps.set.outputs.weblate }}
       wger: ${{ steps.set.outputs.wger }}
+      fail2ban-ui: ${{ steps.set.outputs.fail2ban-ui }}
     steps:
       - uses: actions/checkout@v7
 
@@ -72,6 +74,15 @@ jobs:
               - 'settings.cfg'
               - 'scripts/publish-prerelease.sh'
               - '.github/workflows/build.yml'
+            fail2ban-ui:
+              - 'packages/fail2ban-ui/**'
+              - 'docker/fail2ban-ui/**'
+              - 'packagelist'
+              - 'srclist'
+              - 'Makefile'
+              - 'settings.cfg'
+              - 'scripts/publish-prerelease.sh'
+              - '.github/workflows/build.yml'
 
       - name: Set package outputs
         id: set
@@ -82,10 +93,11 @@ jobs:
           FILTER_GLITCHTIP: ${{ steps.filter.outputs.glitchtip }}
           FILTER_WEBLATE: ${{ steps.filter.outputs.weblate }}
           FILTER_WGER: ${{ steps.filter.outputs.wger }}
+          FILTER_FAIL2BAN_UI: ${{ steps.filter.outputs.fail2ban-ui }}
         run: |
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             pkg="${INPUT_PACKAGE}"
-            for name in gatus glitchtip weblate wger; do
+            for name in gatus glitchtip weblate wger fail2ban-ui; do
               if [ "$pkg" = "all" ] || [ "$pkg" = "$name" ]; then
                 echo "${name}=true" >> "${GITHUB_OUTPUT}"
               else
@@ -97,6 +109,7 @@ jobs:
             echo "glitchtip=${FILTER_GLITCHTIP:-false}" >> "${GITHUB_OUTPUT}"
             echo "weblate=${FILTER_WEBLATE:-false}" >> "${GITHUB_OUTPUT}"
             echo "wger=${FILTER_WGER:-false}" >> "${GITHUB_OUTPUT}"
+            echo "fail2ban-ui=${FILTER_FAIL2BAN_UI:-false}" >> "${GITHUB_OUTPUT}"
           fi
 
   build-gatus:
@@ -324,4 +337,61 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           PACKAGE: wger
+        run: bash scripts/publish-prerelease.sh
+
+  build-fail2ban-ui:
+    needs: changes
+    if: needs.changes.outputs.fail2ban-ui == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            qemu: false
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qemu: false
+          - arch: armhf
+            runner: ubuntu-latest
+            qemu: true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up QEMU
+        if: matrix.qemu
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build fail2ban-ui .deb (${{ matrix.arch }})
+        run: make "fail2ban-ui-${{ matrix.arch }}"
+      - name: Check artifact
+        run: |
+          PKG="$(ls fail2ban-ui_*_${{ matrix.arch }}.deb)"
+          test -f "${PKG}"
+          dpkg-deb -I "${PKG}" >/dev/null
+          ls -lh "${PKG}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fail2ban-ui-deb-${{ matrix.arch }}
+          path: fail2ban-ui_*_${{ matrix.arch }}.deb
+
+  publish-fail2ban-ui:
+    needs: [changes, build-fail2ban-ui]
+    if: needs.changes.outputs.fail2ban-ui == 'true' && needs.build-fail2ban-ui.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: fail2ban-ui-deb-*
+          merge-multiple: true
+      - name: Publish fail2ban-ui prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PACKAGE: fail2ban-ui
         run: bash scripts/publish-prerelease.sh

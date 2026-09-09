@@ -2,7 +2,7 @@
 #
 # check-upstream-version.sh — compare packages/<PACKAGE>/VERSION against upstream.
 #
-# Required: PACKAGE=gatus|glitchtip|weblate|wger
+# Required: PACKAGE=gatus|glitchtip|weblate|wger|fail2ban-ui
 # Optional: VERSION=<upstream> to skip the remote API
 #
 # Exit codes:
@@ -12,7 +12,7 @@
 #
 set -euo pipefail
 
-: "${PACKAGE:?PACKAGE is required (gatus|glitchtip|weblate|wger)}"
+: "${PACKAGE:?PACKAGE is required (gatus|glitchtip|weblate|wger|fail2ban-ui)}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGED_VERSION_FILE="${REPO_ROOT}/packages/${PACKAGE}/VERSION"
@@ -94,6 +94,10 @@ else
     weblate)
       LATEST_STABLE="$(fetch_anitya 33597)"
       CACHE_FILE="${CACHE_DIR}/weblate-anitya-last-check"
+      ;;
+    fail2ban-ui)
+      LATEST_STABLE="$(fetch_github swissmakers/fail2ban-ui)"
+      CACHE_FILE="${CACHE_DIR}/fail2ban-ui-github-last-check"
       ;;
     *)
       echo "Unknown PACKAGE=${PACKAGE}" >&2

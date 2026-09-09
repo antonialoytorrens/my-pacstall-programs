@@ -1,0 +1,20 @@
+[Unit]
+Description=Fail2Ban UI
+Documentation=https://github.com/swissmakers/fail2ban-ui
+After=network-online.target
+Wants=network-online.target fail2ban.service
+
+[Service]
+Type=simple
+User=fail2ban-ui
+Group=fail2ban-ui
+WorkingDirectory=/var/lib/fail2ban-ui
+EnvironmentFile=/etc/fail2ban-ui/fail2ban-ui.env
+ExecStart=/usr/bin/fail2ban-ui
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -30,7 +30,8 @@ GATUS_TARGETS := $(addprefix gatus-,$(GATUS_ARCHES))
 GLITCHTIP_TARGETS := $(addprefix glitchtip-,$(GLITCHTIP_ARCHES))
 WEBLATE_TARGETS := $(addprefix weblate-,$(WEBLATE_ARCHES))
 WGER_TARGETS := $(addprefix wger-,$(WGER_ARCHES))
-BUILD_TARGETS := $(GATUS_TARGETS) $(GLITCHTIP_TARGETS) $(WEBLATE_TARGETS) $(WGER_TARGETS)
+FAIL2BAN_UI_TARGETS := $(addprefix fail2ban-ui-,$(FAIL2BAN_UI_ARCHES))
+BUILD_TARGETS := $(GATUS_TARGETS) $(GLITCHTIP_TARGETS) $(WEBLATE_TARGETS) $(WGER_TARGETS) $(FAIL2BAN_UI_TARGETS)
 DOCKER_TARGETS := $(addprefix docker-,$(BUILD_TARGETS) clean)
 
 .PHONY: all help clean docker-build docker-shell docker-down $(BUILD_TARGETS) $(DOCKER_TARGETS)
@@ -48,10 +49,11 @@ help:
 	@echo "  make docker-wger-armhf WGER_DOMAIN=ci.example.test"
 	@echo ""
 	@echo "Packages and arches:"
-	@echo "  gatus:     $(GATUS_ARCHES)"
-	@echo "  glitchtip: $(GLITCHTIP_ARCHES)"
-	@echo "  weblate:   $(WEBLATE_ARCHES)"
-	@echo "  wger:      $(WGER_ARCHES)"
+	@echo "  gatus:       $(GATUS_ARCHES)"
+	@echo "  glitchtip:   $(GLITCHTIP_ARCHES)"
+	@echo "  weblate:     $(WEBLATE_ARCHES)"
+	@echo "  wger:        $(WGER_ARCHES)"
+	@echo "  fail2ban-ui: $(FAIL2BAN_UI_ARCHES)"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  clean         - Remove built .deb / .sha256 artifacts"
@@ -114,6 +116,14 @@ wger-$(1):
 	  -f docker/wger/Dockerfile --target artifact --output . .
 endef
 $(foreach a,$(WGER_ARCHES),$(eval $(call wger_rule,$(a))))
+
+# --- fail2ban-ui ---
+define fail2ban_ui_rule
+fail2ban-ui-$(1):
+	docker buildx build --platform $$(platform-$(1)) \
+	  -f docker/fail2ban-ui/Dockerfile --target artifact --output . .
+endef
+$(foreach a,$(FAIL2BAN_UI_ARCHES),$(eval $(call fail2ban_ui_rule,$(a))))
 
 # Docker-wrapped equivalents: make docker-<target>
 # Runs the same make target inside compose (kiwi-style). Target arch is still

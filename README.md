@@ -8,6 +8,7 @@ Personal [pacstall](https://github.com/pacstall/pacstall) package repository and
 | **glitchtip** | amd64 |
 | **weblate** | amd64, arm64, armhf |
 | **wger** | amd64, arm64, armhf |
+| **fail2ban-ui** | amd64, arm64, armhf |
 
 Pacstall cannot build for a foreign architecture by itself. Builds run under Docker Buildx with `--platform` (native runners or QEMU).
 

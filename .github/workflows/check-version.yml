@@ -16,6 +16,7 @@ on:
           - glitchtip
           - weblate
           - wger
+          - fail2ban-ui
       upstream_version:
         description: Upstream version to compare (skips remote API when set)
         required: false
@@ -44,6 +45,9 @@ jobs:
           - package: wger
             title_prefix: wger
             body_hint: Update packages/wger/VERSION and pkgver in packages/wger/wger.pacscript. See https://github.com/wger-project/wger/releases
+          - package: fail2ban-ui
+            title_prefix: Fail2Ban UI
+            body_hint: Update packages/fail2ban-ui/VERSION and pkgver in packages/fail2ban-ui/fail2ban-ui.pacscript. See https://github.com/swissmakers/fail2ban-ui/releases
     steps:
       - uses: actions/checkout@v7
 

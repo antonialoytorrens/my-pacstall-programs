@@ -34,7 +34,7 @@ FAIL2BAN_UI_TARGETS := $(addprefix fail2ban-ui-,$(FAIL2BAN_UI_ARCHES))
 BUILD_TARGETS := $(GATUS_TARGETS) $(GLITCHTIP_TARGETS) $(WEBLATE_TARGETS) $(WGER_TARGETS) $(FAIL2BAN_UI_TARGETS)
 DOCKER_TARGETS := $(addprefix docker-,$(BUILD_TARGETS) clean)
 
-.PHONY: all help clean docker-build docker-shell docker-down $(BUILD_TARGETS) $(DOCKER_TARGETS)
+.PHONY: all help clean docker-build docker-shell docker-down $(BUILD_TARGETS) $(DOCKER_TARGETS) wger-ubuntu-26.04
 
 all: help
 
@@ -56,6 +56,7 @@ help:
 	@echo "  fail2ban-ui: $(FAIL2BAN_UI_ARCHES)"
 	@echo ""
 	@echo "Other targets:"
+	@echo "  wger-ubuntu-26.04 - Build wger .deb on Ubuntu 26.04 (local, not CI)"
 	@echo "  clean         - Remove built .deb / .sha256 artifacts"
 	@echo "  docker-build  - Build (or rebuild) the compose builder image"
 	@echo "  docker-shell  - Interactive shell in the builder container"
@@ -116,6 +117,12 @@ wger-$(1):
 	  -f docker/wger/Dockerfile --target artifact --output . .
 endef
 $(foreach a,$(WGER_ARCHES),$(eval $(call wger_rule,$(a))))
+
+# Local Ubuntu 26.04 build (package-name check). Not in BUILD_TARGETS / CI.
+wger-ubuntu-26.04:
+	docker buildx build --platform linux/amd64 \
+	  --build-arg WGER_DOMAIN=$(WGER_DOMAIN) \
+	  -f docker/wger/Dockerfile.ubuntu-26.04 --target artifact --output . .
 
 # --- fail2ban-ui ---
 define fail2ban_ui_rule

@@ -75,41 +75,24 @@ _fail2ban_ui_ensure_user() {
 
 post_install() {
   set -e
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- configure
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- configure
 
   _fail2ban_ui_ensure_user
-  if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-    systemctl daemon-reload || true
-    systemctl enable fail2ban-ui.service || true
-    systemctl start fail2ban-ui.service || true
-  fi
+  systemctl daemon-reload
+  systemctl enable --now fail2ban-ui.service
 }
 
 pre_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl stop fail2ban-ui.service 2>/dev/null || true
-    systemctl disable fail2ban-ui.service 2>/dev/null || true
-  fi
+  systemctl disable --now fail2ban-ui.service
 }
 
 post_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl daemon-reload || true
-  fi
+  systemctl daemon-reload
 }

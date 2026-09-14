@@ -1,9 +1,7 @@
 #!/bin/sh
 set -e
 . /usr/share/debconf/confmodule
-if [ -f /usr/share/dbconfig-common/dpkg/config.pgsql ]; then
-  dbc_dbname="@GATUS_DB_NAME@"
-  dbc_dbuser="@GATUS_DB_USER@"
-  . /usr/share/dbconfig-common/dpkg/config.pgsql
-  dbc_go gatus-pgsql "$@"
-fi
+dbc_dbname="@GATUS_DB_NAME@"
+dbc_dbuser="@GATUS_DB_USER@"
+. /usr/share/dbconfig-common/dpkg/config.pgsql
+dbc_go gatus-pgsql "$@"

@@ -80,21 +80,21 @@ build() {
   sed -i "s|${staging}||g" "${venv}/pyvenv.cfg"
   find "${venv}/bin" -type f -exec sed -i "s|${staging}||g" {} +
 
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources} 2>/dev/null || true
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info 2>/dev/null || true
-  find "${venv}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-  find "${venv}" -name "*.pyc" -delete 2>/dev/null || true
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources}
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info
+  find "${venv}" -depth -type d -name __pycache__ -exec rm -rf {} +
+  find "${venv}" -name "*.pyc" -delete
 
   local site_pkgs
   site_pkgs="$(echo "${venv}/lib"/python*/site-packages)"
-  find "${site_pkgs}" -maxdepth 3 -type d \( -name tests -o -name test \) \
+  find "${site_pkgs}" -depth -maxdepth 3 -type d \( -name tests -o -name test \) \
     -not -path "*/django/*" \
     -not -path "*/celery/*" \
     -not -path "*/social_core/*" \
     -not -path "*/social_django/*" \
-    -exec rm -rf {} + 2>/dev/null || true
+    -exec rm -rf {} +
 
-  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} +
 }
 
 _render_in() {
@@ -136,24 +136,13 @@ package() {
 }
 
 ensure_pg_role_db() {
-  local role="$1"
-  local dbname="$2"
-  local pass="${3:-}"
-  if runuser -u postgres -- psql -tc \
-      "SELECT 1 FROM pg_roles WHERE rolname='${role}'" | grep -q 1; then
-    if [ -n "${pass}" ]; then
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}';" 2>/dev/null || true
-    else
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN;" 2>/dev/null || true
-    fi
-  elif [ -n "${pass}" ]; then
+  local role="$1" dbname="$2" pass="${3:-}"
+  if [ -n "$pass" ]; then
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}';"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}'; EXCEPTION WHEN duplicate_object THEN ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}'; END \$\$;"
   else
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN;"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;"
   fi
   runuser -u postgres -- psql -tc \
     "SELECT 1 FROM pg_database WHERE datname='${dbname}'" | grep -q 1 \
@@ -166,11 +155,8 @@ _shell_quote() {
 
 post_install() {
   set -e
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- configure
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- configure
 
   local venv="/opt/weblate/venv"
   local env_file="/etc/weblate/weblate.env"
@@ -275,7 +261,7 @@ post_install() {
     usermod -aG weblate www-data
   fi
 
-  systemd-tmpfiles --create /usr/lib/tmpfiles.d/weblate.conf 2>/dev/null || true
+  systemd-tmpfiles --create /usr/lib/tmpfiles.d/weblate.conf
 
   systemctl daemon-reload
   systemctl enable --now weblate-web weblate-celery
@@ -284,33 +270,23 @@ post_install() {
 }
 
 pre_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if [ -f /usr/share/dbconfig-common/dpkg/prerm.pgsql ]; then
-    . /usr/share/debconf/confmodule
-    . /usr/share/dbconfig-common/dpkg/prerm.pgsql
-    dbc_go weblate "$@"
-  fi
-  systemctl stop weblate-web weblate-celery 2>/dev/null || true
-  systemctl disable weblate-web weblate-celery 2>/dev/null || true
+  . /usr/share/debconf/confmodule
+  . /usr/share/dbconfig-common/dpkg/prerm.pgsql
+  dbc_go weblate "$@"
+  systemctl stop weblate-web weblate-celery
+  systemctl disable weblate-web weblate-celery
 }
 
 post_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if [ -f /usr/share/dbconfig-common/dpkg/postrm.pgsql ]; then
-    . /usr/share/debconf/confmodule
-    . /usr/share/dbconfig-common/dpkg/postrm.pgsql
-    dbc_go weblate "$@"
-  fi
+  . /usr/share/debconf/confmodule
+  . /usr/share/dbconfig-common/dpkg/postrm.pgsql
+  dbc_go weblate "$@"
 
   if [ "$1" = "purge" ]; then
     if [ -L /home/weblate ]; then

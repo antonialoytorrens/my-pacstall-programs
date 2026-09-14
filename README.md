@@ -20,7 +20,10 @@ make gatus-amd64
 make glitchtip-amd64
 make weblate-arm64          # needs buildx + arm64 or QEMU
 make docker-wger-armhf      # kiwi-style: compose + DOCKER_PLATFORM
+make wger-ubuntu-26.04      # local Ubuntu 26.04 build (not CI)
 ```
+
+`make wger-ubuntu-26.04` builds the wger `.deb` with pacstall on **Ubuntu 26.04** (Resolute) so Ubuntu package names (e.g. `libjpeg-turbo8`) can be checked. Release builds stay on Debian trixie (`make wger-amd64` and CI).
 
 Foreign-arch builds need QEMU binfmt once:
 
@@ -53,7 +56,8 @@ Alternatively, `reprepro include <codename> foo.changes` if you have a `.changes
 
 ```
 packages/<name>/     # pacscripts and packaging files (+ VERSION)
-docker/<name>/       # one Dockerfile per package
+docker/<name>/       # one Dockerfile per package (Debian trixie builder)
+                     # wger also has Dockerfile.ubuntu-26.04 (local only)
 Makefile             # multi-arch targets (kiwi-style docker-*)
 scripts/             # publish / version-check / prerelease cleanup
 ```

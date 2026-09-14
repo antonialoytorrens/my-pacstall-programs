@@ -94,12 +94,12 @@ build() {
   sed -i "s|${staging}||g" "${venv}/pyvenv.cfg"
   find "${venv}/bin" -type f -exec sed -i "s|${staging}||g" {} +
 
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources} 2>/dev/null || true
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info 2>/dev/null || true
-  find "${venv}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-  find "${venv}" -name "*.pyc" -delete 2>/dev/null || true
-  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
-  find "${staging}${_install_prefix}/src" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources}
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info
+  find "${venv}" -depth -type d -name __pycache__ -exec rm -rf {} +
+  find "${venv}" -name "*.pyc" -delete
+  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} +
+  find "${staging}${_install_prefix}/src" -depth -type d -name __pycache__ -exec rm -rf {} +
 }
 
 _render_in() {
@@ -137,24 +137,13 @@ package() {
 }
 
 ensure_pg_role_db() {
-  local role="$1"
-  local dbname="$2"
-  local pass="${3:-}"
-  if runuser -u postgres -- psql -tc \
-      "SELECT 1 FROM pg_roles WHERE rolname='${role}'" | grep -q 1; then
-    if [ -n "${pass}" ]; then
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}';" 2>/dev/null || true
-    else
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN;" 2>/dev/null || true
-    fi
-  elif [ -n "${pass}" ]; then
+  local role="$1" dbname="$2" pass="${3:-}"
+  if [ -n "$pass" ]; then
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}';"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}'; EXCEPTION WHEN duplicate_object THEN ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}'; END \$\$;"
   else
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN;"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;"
   fi
   runuser -u postgres -- psql -tc \
     "SELECT 1 FROM pg_database WHERE datname='${dbname}'" | grep -q 1 \
@@ -163,11 +152,8 @@ ensure_pg_role_db() {
 
 post_install() {
   set -e
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- configure
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- configure
 
   local src="/opt/glitchtip/src"
   local venv="/opt/glitchtip/venv"
@@ -247,11 +233,11 @@ post_install() {
   chown root:glitchtip "$env_file"
 
   run_as_glitchtip "$venv/bin/python" "$src/manage.py" migrate --no-input
-  run_as_glitchtip "$venv/bin/python" "$src/manage.py" maintain_partitions || true
+  run_as_glitchtip "$venv/bin/python" "$src/manage.py" maintain_partitions
   run_as_glitchtip "$venv/bin/python" "$src/manage.py" collectstatic --no-input
 
   chmod 750 /var/lib/glitchtip
-  chmod -R g+rX /var/lib/glitchtip/static 2>/dev/null || true
+  chmod -R g+rX /var/lib/glitchtip/static
 
   systemctl daemon-reload
   systemctl enable --now glitchtip glitchtip-worker
@@ -260,31 +246,21 @@ post_install() {
 }
 
 pre_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if [ -f /usr/share/dbconfig-common/dpkg/prerm.pgsql ]; then
-    . /usr/share/debconf/confmodule
-    . /usr/share/dbconfig-common/dpkg/prerm.pgsql
-    dbc_go glitchtip "$@"
-  fi
-  systemctl stop glitchtip glitchtip-worker 2>/dev/null || true
-  systemctl disable glitchtip glitchtip-worker 2>/dev/null || true
+  . /usr/share/debconf/confmodule
+  . /usr/share/dbconfig-common/dpkg/prerm.pgsql
+  dbc_go glitchtip "$@"
+  systemctl stop glitchtip glitchtip-worker
+  systemctl disable glitchtip glitchtip-worker
 }
 
 post_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if [ -f /usr/share/dbconfig-common/dpkg/postrm.pgsql ]; then
-    . /usr/share/debconf/confmodule
-    . /usr/share/dbconfig-common/dpkg/postrm.pgsql
-    dbc_go glitchtip "$@"
-  fi
+  . /usr/share/debconf/confmodule
+  . /usr/share/dbconfig-common/dpkg/postrm.pgsql
+  dbc_go glitchtip "$@"
 }

@@ -138,31 +138,18 @@ EOF
 }
 
 _gatus_restart() {
-  if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-    systemctl daemon-reload || true
-    systemctl try-restart gatus.service 2>/dev/null || true
-  fi
+  systemctl daemon-reload
+  systemctl try-restart gatus.service
 }
 
 ensure_pg_role_db() {
-  local role="$1"
-  local dbname="$2"
-  local pass="${3:-}"
-  if runuser -u postgres -- psql -tc \
-      "SELECT 1 FROM pg_roles WHERE rolname='${role}'" | grep -q 1; then
-    if [ -n "${pass}" ]; then
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}';" 2>/dev/null || true
-    else
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN;" 2>/dev/null || true
-    fi
-  elif [ -n "${pass}" ]; then
+  local role="$1" dbname="$2" pass="${3:-}"
+  if [ -n "$pass" ]; then
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}';"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}'; EXCEPTION WHEN duplicate_object THEN ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}'; END \$\$;"
   else
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN;"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;"
   fi
   runuser -u postgres -- psql -tc \
     "SELECT 1 FROM pg_database WHERE datname='${dbname}'" | grep -q 1 \
@@ -171,22 +158,16 @@ ensure_pg_role_db() {
 
 post_install() {
   set -e
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- configure
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- configure
 
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
 
   case "${pkg}" in
     gatus)
       _gatus_ensure_user
-      if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-        systemctl daemon-reload || true
-        systemctl enable gatus.service || true
-        systemctl start gatus.service || true
-      fi
+      systemctl daemon-reload
+      systemctl enable --now gatus.service
       ;;
 
     gatus-pgsql)
@@ -224,7 +205,7 @@ post_install() {
       fi
 
       _gatus_write_storage_yaml postgres "${storage_path}"
-      db_stop 2>/dev/null || true
+      db_stop
       _gatus_restart
       ;;
 
@@ -237,73 +218,55 @@ post_install() {
       local sqlite_path="/var/lib/gatus/data.db"
       _gatus_write_storage_yaml sqlite "${sqlite_path}"
       chown gatus:gatus /var/lib/gatus
-      db_stop 2>/dev/null || true
+      db_stop
       _gatus_restart
       ;;
   esac
 }
 
 pre_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
     gatus)
-      if command -v systemctl >/dev/null 2>&1; then
-        systemctl stop gatus.service 2>/dev/null || true
-        systemctl disable gatus.service 2>/dev/null || true
-      fi
+      systemctl stop gatus.service
+      systemctl disable gatus.service
       ;;
     gatus-pgsql)
-      if [ -f /usr/share/dbconfig-common/dpkg/prerm.pgsql ]; then
-        . /usr/share/debconf/confmodule
-        . /usr/share/dbconfig-common/dpkg/prerm.pgsql
-        dbc_go gatus-pgsql "$@"
-      fi
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/prerm.pgsql
+      dbc_go gatus-pgsql "$@"
       rm -f /etc/gatus/config.d/10-storage.yaml
       ;;
     gatus-sqlite)
-      if [ -f /usr/share/dbconfig-common/dpkg/prerm.sqlite3 ]; then
-        . /usr/share/debconf/confmodule
-        . /usr/share/dbconfig-common/dpkg/prerm.sqlite3
-        dbc_go gatus-sqlite "$@"
-      fi
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/prerm.sqlite3
+      dbc_go gatus-sqlite "$@"
       rm -f /etc/gatus/config.d/10-storage.yaml
       ;;
   esac
 }
 
 post_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
     gatus)
-      if command -v systemctl >/dev/null 2>&1; then
-        systemctl daemon-reload || true
-      fi
+      systemctl daemon-reload
       ;;
     gatus-pgsql)
-      if [ -f /usr/share/dbconfig-common/dpkg/postrm.pgsql ]; then
-        . /usr/share/debconf/confmodule
-        . /usr/share/dbconfig-common/dpkg/postrm.pgsql
-        dbc_go gatus-pgsql "$@"
-      fi
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/postrm.pgsql
+      dbc_go gatus-pgsql "$@"
       ;;
     gatus-sqlite)
-      if [ -f /usr/share/dbconfig-common/dpkg/postrm.sqlite3 ]; then
-        . /usr/share/debconf/confmodule
-        . /usr/share/dbconfig-common/dpkg/postrm.sqlite3
-        dbc_go gatus-sqlite "$@"
-      fi
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/postrm.sqlite3
+      dbc_go gatus-sqlite "$@"
       ;;
   esac
 }

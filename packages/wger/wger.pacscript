@@ -41,18 +41,22 @@ source=(
 makedepends+=(
   "python3" "python3-venv" "python3-dev" "python3-pip"
   "build-essential" "pkg-config" "patch"
-  "libpq-dev" "zlib1g-dev" "libjpeg62-turbo-dev" "libwebp-dev"
+  "libpq-dev" "zlib1g-dev" "libwebp-dev"
   "libssl-dev" "libffi-dev"
   "gettext" "curl" "ca-certificates" "tzdata" "git"
   "nodejs" "npm"
   "rustc" "cargo"
 )
+makedepends_debian=("libjpeg62-turbo-dev")
+makedepends_ubuntu=("libjpeg-turbo8-dev")
 
 depends+=(
   "python3" "gunicorn"
-  "libpq5" "libjpeg62-turbo" "libwebp7" "gettext-base" "tzdata"
+  "libpq5" "libwebp7" "gettext-base" "tzdata"
   "postgresql" "dbconfig-pgsql" "debconf" "debconf-utils"
 )
+depends_debian=("libjpeg62-turbo")
+depends_ubuntu=("libjpeg-turbo8")
 
 recommends=("valkey-server")
 backup=('etc/wger/wger.env')
@@ -120,20 +124,20 @@ build() {
   sed -i "s|${staging}||g" "${venv}/pyvenv.cfg"
   find "${venv}/bin" -type f -exec sed -i "s|${staging}||g" {} +
 
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources} 2>/dev/null || true
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info 2>/dev/null || true
-  find "${venv}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-  find "${venv}" -name "*.pyc" -delete 2>/dev/null || true
-  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources}
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info
+  find "${venv}" -depth -type d -name __pycache__ -exec rm -rf {} +
+  find "${venv}" -name "*.pyc" -delete
+  find "${venv}" -name "*.so" -exec strip --strip-unneeded {} +
 
   local site_pkgs
   site_pkgs="$(echo "${venv}/lib"/python*/site-packages)"
-  find "${site_pkgs}" -maxdepth 3 -type d \( -name tests -o -name test \) \
+  find "${site_pkgs}" -depth -maxdepth 3 -type d \( -name tests -o -name test \) \
     -not -path "*/django/*" \
     -not -path "*/celery/*" \
-    -exec rm -rf {} + 2>/dev/null || true
+    -exec rm -rf {} +
 
-  find "${src_dest}" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  find "${src_dest}" -depth -type d -name __pycache__ -exec rm -rf {} +
 }
 
 _render_in() {
@@ -176,24 +180,13 @@ package() {
 }
 
 ensure_pg_role_db() {
-  local role="$1"
-  local dbname="$2"
-  local pass="${3:-}"
-  if runuser -u postgres -- psql -tc \
-      "SELECT 1 FROM pg_roles WHERE rolname='${role}'" | grep -q 1; then
-    if [ -n "${pass}" ]; then
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}';" 2>/dev/null || true
-    else
-      runuser -u postgres -- psql -c \
-        "ALTER ROLE ${role} WITH LOGIN;" 2>/dev/null || true
-    fi
-  elif [ -n "${pass}" ]; then
+  local role="$1" dbname="$2" pass="${3:-}"
+  if [ -n "$pass" ]; then
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}';"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN PASSWORD '${pass}'; EXCEPTION WHEN duplicate_object THEN ALTER ROLE ${role} WITH LOGIN PASSWORD '${pass}'; END \$\$;"
   else
     runuser -u postgres -- psql -c \
-      "CREATE ROLE ${role} WITH LOGIN;"
+      "DO \$\$ BEGIN CREATE ROLE ${role} WITH LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;"
   fi
   runuser -u postgres -- psql -tc \
     "SELECT 1 FROM pg_database WHERE datname='${dbname}'" | grep -q 1 \
@@ -202,11 +195,8 @@ ensure_pg_role_db() {
 
 post_install() {
   set -e
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- configure
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- configure
 
   local src="/opt/wger/src"
   local venv="/opt/wger/venv"
@@ -241,15 +231,11 @@ post_install() {
   if grep -q '__JWTPRIVATE_PLACEHOLDER__' "$env_file"; then
     local jwt_output jwt_private jwt_public
     jwt_output=$(env DJANGO_SETTINGS_MODULE=settings.main PYTHONPATH="${src}" \
-      "${venv}/bin/django-admin" generate-jwt-keys 2>/dev/null) || true
+      "${venv}/bin/django-admin" generate-jwt-keys)
     jwt_private=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PRIVATE_KEY=' | cut -d= -f2-)
     jwt_public=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PUBLIC_KEY=' | cut -d= -f2-)
-    if [ -n "${jwt_private}" ] && [ -n "${jwt_public}" ]; then
-      sed -i "s|__JWTPRIVATE_PLACEHOLDER__|${jwt_private}|" "$env_file"
-      sed -i "s|__JWTPUBLIC_PLACEHOLDER__|${jwt_public}|" "$env_file"
-    else
-      fancy_message error "Failed to generate JWT keys; placeholders left in ${env_file}."
-    fi
+    sed -i "s|__JWTPRIVATE_PLACEHOLDER__|${jwt_private}|" "$env_file"
+    sed -i "s|__JWTPUBLIC_PLACEHOLDER__|${jwt_public}|" "$env_file"
   fi
 
   . /usr/share/dbconfig-common/dpkg/postinst.pgsql
@@ -305,14 +291,14 @@ post_install() {
   run_as_wger "${venv}/bin/wger" bootstrap --no-process-static
   run_as_wger "${venv}/bin/django-admin" migrate --noinput
   run_as_wger "${venv}/bin/django-admin" collectstatic --noinput
-  run_as_wger "${venv}/bin/django-admin" set-site-url || true
+  run_as_wger "${venv}/bin/django-admin" set-site-url
 
   fancy_message warn "Default admin (first install only): admin / adminadmin — CHANGE THIS PASSWORD immediately."
 
   chmod 750 /var/lib/wger
-  chmod -R g+rX /var/lib/wger/static 2>/dev/null || true
+  chmod -R g+rX /var/lib/wger/static
 
-  systemd-tmpfiles --create /usr/lib/tmpfiles.d/wger.conf 2>/dev/null || true
+  systemd-tmpfiles --create /usr/lib/tmpfiles.d/wger.conf
   systemctl daemon-reload
   systemctl enable --now wger
 
@@ -320,31 +306,21 @@ post_install() {
 }
 
 pre_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if [ -f /usr/share/dbconfig-common/dpkg/prerm.pgsql ]; then
-    . /usr/share/debconf/confmodule
-    . /usr/share/dbconfig-common/dpkg/prerm.pgsql
-    dbc_go wger "$@"
-  fi
-  systemctl stop wger wger-celery-worker wger-celery-beat 2>/dev/null || true
-  systemctl disable wger wger-celery-worker wger-celery-beat 2>/dev/null || true
+  . /usr/share/debconf/confmodule
+  . /usr/share/dbconfig-common/dpkg/prerm.pgsql
+  dbc_go wger "$@"
+  systemctl stop wger wger-celery-worker wger-celery-beat
+  systemctl disable wger wger-celery-worker wger-celery-beat
 }
 
 post_remove() {
-  if [ "$#" -eq 0 ] && [ "${#_DPKG_ARGV[@]}" -gt 0 ]; then
-    set -- "${_DPKG_ARGV[@]}"
-  elif [ "$#" -eq 0 ]; then
-    set -- remove
-  fi
+  [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
+  [ $# -eq 0 ] && set -- remove
 
-  if [ -f /usr/share/dbconfig-common/dpkg/postrm.pgsql ]; then
-    . /usr/share/debconf/confmodule
-    . /usr/share/dbconfig-common/dpkg/postrm.pgsql
-    dbc_go wger "$@"
-  fi
+  . /usr/share/debconf/confmodule
+  . /usr/share/dbconfig-common/dpkg/postrm.pgsql
+  dbc_go wger "$@"
 }

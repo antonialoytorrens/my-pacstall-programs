@@ -67,7 +67,7 @@ jobs:
               - '.github/workflows/build.yml'
             wger:
               - 'packages/wger/**'
-              - 'docker/wger/**'
+              - 'docker/wger/Dockerfile'
               - 'packagelist'
               - 'srclist'
               - 'Makefile'

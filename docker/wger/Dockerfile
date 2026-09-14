@@ -36,10 +36,14 @@ WORKDIR /build
 COPY packagelist srclist /build/
 COPY packages/ /build/packages/
 
-# Pacscript reads domain defaults; allow override via build-arg by sed if needed.
+# Helpers depend on wger via apt; build main first, install it, then the splits.
 RUN sed -i "s|_wger_domain=\"wger.localhost.local\"|_wger_domain=\"${WGER_DOMAIN}\"|" \
       packages/wger/wger.pacscript \
-  && pacstall -BPNs -I packages/wger/wger.pacscript \
+  && set -e \
+  && pacstall -BPNs -I packages/wger/wger.pacscript:wger \
+  && apt-get install -y -qq --no-install-recommends ./wger_*.deb \
+  && pacstall -BPNs -I packages/wger/wger.pacscript:wger-pgsql \
+  && pacstall -BPNs -I packages/wger/wger.pacscript:wger-sqlite \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/pacstall /var/cache/apt/archives/*
 

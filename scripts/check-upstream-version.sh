@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 #
-# check-upstream-version.sh — compare packages/<PACKAGE>/VERSION against upstream.
+# check-upstream-version.sh — compare pkgver in the pacscript against upstream.
 #
-# Required: PACKAGE=gatus|glitchtip|weblate|wger|fail2ban-ui
+# Required: PACKAGE=<name>
 # Optional: VERSION=<upstream> to skip the remote API
 #
+# Upstream resolution (scripts/discover.sh upstream):
+#   1. anitya.json  (package → Anitya project id)
+#   2. GitHub URL inferred from the pacscript (source=/url=)#
 # Exit codes:
 #   0 — packaged version is up to date
 #   1 — a newer stable version is available (prints version to stdout)
@@ -12,19 +15,14 @@
 #
 set -euo pipefail
 
-: "${PACKAGE:?PACKAGE is required (gatus|glitchtip|weblate|wger|fail2ban-ui)}"
+: "${PACKAGE:?PACKAGE is required}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PACKAGED_VERSION_FILE="${REPO_ROOT}/packages/${PACKAGE}/VERSION"
+DISCOVER="${REPO_ROOT}/scripts/discover.sh"
 CACHE_DIR="${REPO_ROOT}/.cache"
 USER_AGENT="${USER_AGENT:-my-pacstall-programs/1.0 (+https://github.com/antonialoytorrens/my-pacstall-programs)}"
 
-if [ ! -f "${PACKAGED_VERSION_FILE}" ]; then
-  echo "Packaged version file not found: ${PACKAGED_VERSION_FILE}" >&2
-  exit 2
-fi
-
-PACKAGED_VERSION="$(tr -d '[:space:]' < "${PACKAGED_VERSION_FILE}")"
+PACKAGED_VERSION="$("${DISCOVER}" pkgver "${PACKAGE}")"
 
 fetch_github() {
   local github_repo="$1"
@@ -77,30 +75,19 @@ else
     exit 2
   fi
 
+  UPSTREAM="$("${DISCOVER}" upstream "${PACKAGE}")"
   LATEST_CREATED_ON=""
-  case "${PACKAGE}" in
-    gatus)
-      LATEST_STABLE="$(fetch_github TwiN/gatus)"
-      CACHE_FILE="${CACHE_DIR}/gatus-github-last-check"
+  case "${UPSTREAM}" in
+    github:*)
+      LATEST_STABLE="$(fetch_github "${UPSTREAM#github:}")"
+      CACHE_FILE="${CACHE_DIR}/${PACKAGE}-github-last-check"
       ;;
-    wger)
-      LATEST_STABLE="$(fetch_github wger-project/wger)"
-      CACHE_FILE="${CACHE_DIR}/wger-github-last-check"
-      ;;
-    glitchtip)
-      LATEST_STABLE="$(fetch_anitya 392074)"
-      CACHE_FILE="${CACHE_DIR}/glitchtip-anitya-last-check"
-      ;;
-    weblate)
-      LATEST_STABLE="$(fetch_anitya 33597)"
-      CACHE_FILE="${CACHE_DIR}/weblate-anitya-last-check"
-      ;;
-    fail2ban-ui)
-      LATEST_STABLE="$(fetch_github swissmakers/fail2ban-ui)"
-      CACHE_FILE="${CACHE_DIR}/fail2ban-ui-github-last-check"
+    anitya:*)
+      LATEST_STABLE="$(fetch_anitya "${UPSTREAM#anitya:}")"
+      CACHE_FILE="${CACHE_DIR}/${PACKAGE}-anitya-last-check"
       ;;
     *)
-      echo "Unknown PACKAGE=${PACKAGE}" >&2
+      echo "unsupported upstream: ${UPSTREAM}" >&2
       exit 2
       ;;
   esac

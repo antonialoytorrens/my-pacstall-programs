@@ -1,20 +1,16 @@
 #!/usr/bin/env bash
-# Publish a GitHub prerelease for one package (PACKAGE=gatus|glitchtip|weblate|wger|fail2ban-ui).
+# Publish a GitHub prerelease for one package (PACKAGE=<name>).
 # Tag/title use the package name prefix so Releases stay distinguishable in the monorepo.
+# Version is read from pkgver="..." in packages/<name>/<name>.pacscript.
 set -euo pipefail
 
 : "${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
-: "${PACKAGE:?PACKAGE is required (gatus|glitchtip|weblate|wger|fail2ban-ui)}"
+: "${PACKAGE:?PACKAGE is required}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION_FILE="${REPO_ROOT}/packages/${PACKAGE}/VERSION"
+DISCOVER="${REPO_ROOT}/scripts/discover.sh"
 
-if [ ! -f "${VERSION_FILE}" ]; then
-  echo "Missing version file: ${VERSION_FILE}" >&2
-  exit 1
-fi
-
-VERSION="$(tr -d '[:space:]' < "${VERSION_FILE}")"
+VERSION="$("${DISCOVER}" pkgver "${PACKAGE}")"
 TIMESTAMP="$(date -u +%Y%m%d%H%M%S)"
 TAG="${PACKAGE}-${VERSION}-${TIMESTAMP}"
 RELEASE_NAME="${TAG}"

@@ -1,10 +1,11 @@
-pkgname="wger"
-pkgver="2.6"
+pkgbase="wger"
+pkgname=("wger" "wger-pgsql" "wger-sqlite")
+pkgver="2.7"
 pkgrel="1"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')
-pkgdesc="wger Workout Manager (bundled venv, native systemd, dbconfig-pgsql)"
+pkgdesc="wger Workout Manager (bundled venv, native systemd)"
 maintainer=("Antoni Aloy <https://github.com/antonialoytorrens/wger-deb>")
 external_connection=true
 
@@ -28,14 +29,16 @@ _psycopg_c_version="3.3.4"
 _DPKG_ARGV=("$@")
 
 source=(
-  "${pkgname}-${pkgver}.tar.gz::https://github.com/wger-project/wger/archive/refs/tags/${pkgver}.tar.gz"
+  "wger-${pkgver}.tar.gz::https://github.com/wger-project/wger/archive/refs/tags/${pkgver}.tar.gz"
   "0001-psycopg-drop-binary-extra.patch"
   "wger.env.in"
-  "wger.config.in"
+  "wger-pgsql.config.in"
+  "wger-sqlite.config.in"
   "wger.service"
   "wger-celery-worker.service"
   "wger-celery-beat.service"
   "wger.tmpfiles"
+  "pgsql.conf"
 )
 
 makedepends+=(
@@ -49,17 +52,6 @@ makedepends+=(
 )
 makedepends_debian=("libjpeg62-turbo-dev")
 makedepends_ubuntu=("libjpeg-turbo8-dev")
-
-depends+=(
-  "python3" "gunicorn"
-  "libpq5" "libwebp7" "gettext-base" "tzdata"
-  "postgresql" "dbconfig-pgsql" "debconf" "debconf-utils"
-)
-depends_debian=("libjpeg62-turbo")
-depends_ubuntu=("libjpeg-turbo8")
-
-recommends=("valkey-server")
-backup=('etc/wger/wger.env')
 
 prepare() {
   set -e
@@ -150,7 +142,18 @@ _render_in() {
       "${1}" > "${2}"
 }
 
-package() {
+package_wger() {
+  depends=(
+    "python3" "gunicorn" "systemd"
+    "libpq5" "libwebp7" "gettext-base" "tzdata"
+    "wger-pgsql | wger-sqlite | dbconfig-no-thanks"
+  )
+  depends_debian=("libjpeg62-turbo")
+  depends_ubuntu=("libjpeg-turbo8")
+  recommends=("valkey-server")
+  backup=('etc/wger/wger.env')
+  pkgdesc="wger Workout Manager (bundled venv, native systemd)"
+
   local staging="${srcdir}/staging"
   mkdir -p "${pkgdir}${_install_prefix}"
   cp -a "${staging}${_install_prefix}/." "${pkgdir}${_install_prefix}/"
@@ -170,13 +173,94 @@ package() {
     "${pkgdir}/usr/lib/tmpfiles.d/wger.conf"
 
   mkdir -p "${pkgdir}/var/lib/wger/media" "${pkgdir}/var/lib/wger/static" "${pkgdir}/var/log/wger"
+}
 
-  mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/wger/install"
-  printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/wger/install/pgsql"
+package_wger-pgsql() {
+  arch=('all')
+  depends=("wger" "dbconfig-pgsql" "postgresql" "debconf" "debconf-utils")
+  conflicts=("wger-sqlite")
+  replaces=("wger-sqlite")
+  breaks=("wger-sqlite")
+  provides=("wger-db")
+  pkgdesc="wger PostgreSQL storage (dbconfig-pgsql)"
+
+  mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/wger-pgsql/install"
+  printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/wger-pgsql/install/pgsql"
+
+  install -Dm644 "${srcdir}/pgsql.conf" \
+    "${pkgdir}/usr/lib/systemd/system/wger.service.d/pgsql.conf"
 
   mkdir -p "${pkgdir}/DEBIAN"
-  _render_in "${srcdir}/wger.config.in" "${pkgdir}/DEBIAN/config"
+  _render_in "${srcdir}/wger-pgsql.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
+}
+
+package_wger-sqlite() {
+  arch=('all')
+  depends=("wger" "dbconfig-sqlite3" "debconf" "debconf-utils")
+  conflicts=("wger-pgsql")
+  replaces=("wger-pgsql")
+  breaks=("wger-pgsql")
+  provides=("wger-db")
+  pkgdesc="wger SQLite storage (dbconfig-sqlite3)"
+
+  mkdir -p "${pkgdir}/usr/share/dbconfig-common/data/wger-sqlite/install"
+  printf 'SELECT 1;\n' > "${pkgdir}/usr/share/dbconfig-common/data/wger-sqlite/install/sqlite3"
+
+  mkdir -p "${pkgdir}/DEBIAN"
+  _render_in "${srcdir}/wger-sqlite.config.in" "${pkgdir}/DEBIAN/config"
+  chmod 755 "${pkgdir}/DEBIAN/config"
+}
+
+_have_systemd() { [ -d /run/systemd/system ]; }
+
+_wger_ensure_user() {
+  if ! id -u wger &>/dev/null; then
+    adduser --system --group --home /var/lib/wger \
+      --no-create-home --shell /bin/bash wger
+  fi
+  mkdir -p /var/lib/wger/media /var/lib/wger/static /var/log/wger
+  chown -R wger:wger /var/lib/wger /var/log/wger
+}
+
+_wger_run_as() {
+  local env_file="/etc/wger/wger.env" src="/opt/wger/src"
+  runuser -u wger -- bash -c '
+    set -a; source "$1"; set +a
+    cd "$2" || exit 1
+    shift 2
+    exec "$@"
+  ' bash "$env_file" "$src" "$@"
+}
+
+_wger_write_db_env() {
+  local env_file="/etc/wger/wger.env"
+  grep -vE '^(DJANGO_DB_ENGINE|DJANGO_DB_DATABASE|DJANGO_DB_USER|DJANGO_DB_PASSWORD|DJANGO_DB_HOST|DJANGO_DB_PORT)=' \
+    "$env_file" > "${env_file}.tmp"
+  {
+    cat "${env_file}.tmp"
+    cat
+  } > "$env_file"
+  rm -f "${env_file}.tmp"
+  chmod 640 "$env_file"
+  chown root:wger "$env_file"
+}
+
+_wger_bootstrap() {
+  local venv="/opt/wger/venv"
+  _wger_run_as "${venv}/bin/wger" bootstrap --no-process-static
+  _wger_run_as "${venv}/bin/django-admin" migrate --noinput
+  _wger_run_as "${venv}/bin/django-admin" collectstatic --noinput
+  _wger_run_as "${venv}/bin/django-admin" set-site-url
+  fancy_message warn "Default admin (first install only): admin / adminadmin — CHANGE THIS PASSWORD immediately."
+  chmod 750 /var/lib/wger
+  chmod -R g+rX /var/lib/wger/static
+}
+
+_wger_restart() {
+  _have_systemd || return 0
+  systemctl daemon-reload
+  systemctl try-restart wger.service
 }
 
 ensure_pg_role_db() {
@@ -198,129 +282,157 @@ post_install() {
   [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
   [ $# -eq 0 ] && set -- configure
 
+  local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   local src="/opt/wger/src"
   local venv="/opt/wger/venv"
   local env_file="/etc/wger/wger.env"
-  local pkg="wger"
 
-  . /usr/share/debconf/confmodule
+  case "${pkg}" in
+    wger)
+      _wger_ensure_user
 
-  if ! id -u wger &>/dev/null; then
-    adduser --system --group --home /var/lib/wger \
-      --no-create-home --shell /bin/bash wger
-  fi
-
-  mkdir -p /var/lib/wger/media /var/lib/wger/static
-  chown -R wger:wger /var/lib/wger /var/log/wger
-
-  run_as_wger() {
-    runuser -u wger -- bash -c '
-      set -a; source "$1"; set +a
-      cd "$2" || exit 1
-      shift 2
-      exec "$@"
-    ' bash "$env_file" "$src" "$@"
-  }
-
-  if grep -q '__SECRETKEY_PLACEHOLDER__' "$env_file"; then
-    local secret
-    secret=$("$venv/bin/python" -c "import secrets; print(secrets.token_urlsafe(50))")
-    sed -i "s|__SECRETKEY_PLACEHOLDER__|${secret}|" "$env_file"
-  fi
-
-  if grep -q '__JWTPRIVATE_PLACEHOLDER__' "$env_file"; then
-    local jwt_output jwt_private jwt_public
-    jwt_output=$(env DJANGO_SETTINGS_MODULE=settings.main PYTHONPATH="${src}" \
-      "${venv}/bin/django-admin" generate-jwt-keys)
-    jwt_private=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PRIVATE_KEY=' | cut -d= -f2-)
-    jwt_public=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PUBLIC_KEY=' | cut -d= -f2-)
-    sed -i "s|__JWTPRIVATE_PLACEHOLDER__|${jwt_private}|" "$env_file"
-    sed -i "s|__JWTPUBLIC_PLACEHOLDER__|${jwt_public}|" "$env_file"
-  fi
-
-  . /usr/share/dbconfig-common/dpkg/postinst.pgsql
-  dbc_go "$pkg" "$@"
-
-  # shellcheck disable=SC1091
-  . /etc/dbconfig-common/${pkg}.conf
-
-  write_db_env() {
-    local use_password="$1"
-    grep -vE '^(DJANGO_DB_DATABASE|DJANGO_DB_USER|DJANGO_DB_PASSWORD|DJANGO_DB_HOST|DJANGO_DB_PORT)=' \
-      "$env_file" > "${env_file}.tmp"
-    {
-      cat "${env_file}.tmp"
-      echo "DJANGO_DB_DATABASE=${dbc_dbname}"
-      echo "DJANGO_DB_USER=${dbc_dbuser}"
-      if [ "${use_password}" = "1" ]; then
-        echo "DJANGO_DB_PASSWORD=${dbc_dbpass}"
-        echo "DJANGO_DB_HOST=${db_host}"
-        echo "DJANGO_DB_PORT=${dbc_dbport:-5432}"
-      else
-        echo "DJANGO_DB_HOST=${db_host}"
-        echo "DJANGO_DB_PORT=${dbc_dbport:-5432}"
+      if grep -q '__SECRETKEY_PLACEHOLDER__' "$env_file"; then
+        local secret
+        secret=$("$venv/bin/python" -c "import secrets; print(secrets.token_urlsafe(50))")
+        sed -i "s|__SECRETKEY_PLACEHOLDER__|${secret}|" "$env_file"
       fi
-    } > "$env_file"
-    rm -f "${env_file}.tmp"
-  }
 
-  local db_host="${dbc_dbserver:-127.0.0.1}"
-  case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
+      if grep -q '__JWTPRIVATE_PLACEHOLDER__' "$env_file"; then
+        local jwt_output jwt_private jwt_public
+        jwt_output=$(env DJANGO_SETTINGS_MODULE=settings.main PYTHONPATH="${src}" \
+          "${venv}/bin/django-admin" generate-jwt-keys)
+        jwt_private=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PRIVATE_KEY=' | cut -d= -f2-)
+        jwt_public=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PUBLIC_KEY=' | cut -d= -f2-)
+        sed -i "s|__JWTPRIVATE_PLACEHOLDER__|${jwt_private}|" "$env_file"
+        sed -i "s|__JWTPUBLIC_PLACEHOLDER__|${jwt_public}|" "$env_file"
+      fi
 
-  local use_pw=1
-  if [ "${dbc_install}" != "true" ]; then
-    dbc_dbname="${dbc_dbname:-wger}"
-    dbc_dbuser="${dbc_dbuser:-wger}"
-    use_pw=0
-  else
-    case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
-      ident:local|ident:|ident:localhost|ident:127.0.0.1) use_pw=0 ;;
-    esac
-  fi
+      chmod 640 "$env_file"
+      chown root:wger "$env_file"
 
-  if [ "${use_pw}" = "1" ]; then
-    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
-  else
-    ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
-  fi
-  write_db_env "${use_pw}"
+      if _have_systemd; then
+        systemd-tmpfiles --create /usr/lib/tmpfiles.d/wger.conf
+        systemctl daemon-reload
+        systemctl enable --now wger
+      fi
+      ;;
 
-  chmod 640 "$env_file"
-  chown root:wger "$env_file"
+    wger-pgsql)
+      _wger_ensure_user
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/postinst.pgsql
+      dbc_go wger-pgsql "$@"
 
-  run_as_wger "${venv}/bin/wger" bootstrap --no-process-static
-  run_as_wger "${venv}/bin/django-admin" migrate --noinput
-  run_as_wger "${venv}/bin/django-admin" collectstatic --noinput
-  run_as_wger "${venv}/bin/django-admin" set-site-url
+      # shellcheck disable=SC1091
+      . /etc/dbconfig-common/wger-pgsql.conf
 
-  fancy_message warn "Default admin (first install only): admin / adminadmin — CHANGE THIS PASSWORD immediately."
+      local db_host="${dbc_dbserver:-127.0.0.1}"
+      case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
 
-  chmod 750 /var/lib/wger
-  chmod -R g+rX /var/lib/wger/static
+      local use_pw=1
+      if [ "${dbc_install}" != "true" ]; then
+        dbc_dbname="${dbc_dbname:-wger}"
+        dbc_dbuser="${dbc_dbuser:-wger}"
+        use_pw=0
+      else
+        case "${dbc_authmethod_user}:${dbc_dbserver:-local}" in
+          ident:local|ident:|ident:localhost|ident:127.0.0.1) use_pw=0 ;;
+        esac
+      fi
 
-  systemd-tmpfiles --create /usr/lib/tmpfiles.d/wger.conf
-  systemctl daemon-reload
-  systemctl enable --now wger
+      if [ "${use_pw}" = "1" ]; then
+        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}" "${dbc_dbpass}"
+      else
+        ensure_pg_role_db "${dbc_dbuser}" "${dbc_dbname}"
+      fi
 
-  db_stop
+      if [ "${use_pw}" = "1" ]; then
+        _wger_write_db_env << EOF
+DJANGO_DB_ENGINE=django.db.backends.postgresql
+DJANGO_DB_DATABASE=${dbc_dbname}
+DJANGO_DB_USER=${dbc_dbuser}
+DJANGO_DB_PASSWORD=${dbc_dbpass}
+DJANGO_DB_HOST=${db_host}
+DJANGO_DB_PORT=${dbc_dbport:-5432}
+EOF
+      else
+        _wger_write_db_env << EOF
+DJANGO_DB_ENGINE=django.db.backends.postgresql
+DJANGO_DB_DATABASE=${dbc_dbname}
+DJANGO_DB_USER=${dbc_dbuser}
+DJANGO_DB_HOST=${db_host}
+DJANGO_DB_PORT=${dbc_dbport:-5432}
+EOF
+      fi
+
+      _wger_bootstrap
+      db_stop
+      _wger_restart
+      ;;
+
+    wger-sqlite)
+      _wger_ensure_user
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/postinst.sqlite3
+      dbc_go wger-sqlite "$@"
+
+      local sqlite_path="/var/lib/wger/db.sqlite3"
+      _wger_write_db_env << EOF
+DJANGO_DB_ENGINE=django.db.backends.sqlite3
+DJANGO_DB_DATABASE=${sqlite_path}
+EOF
+      chown wger:wger /var/lib/wger
+
+      _wger_bootstrap
+      db_stop
+      _wger_restart
+      ;;
+  esac
 }
 
 pre_remove() {
   [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
   [ $# -eq 0 ] && set -- remove
 
-  . /usr/share/debconf/confmodule
-  . /usr/share/dbconfig-common/dpkg/prerm.pgsql
-  dbc_go wger "$@"
-  systemctl stop wger wger-celery-worker wger-celery-beat
-  systemctl disable wger wger-celery-worker wger-celery-beat
+  local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
+  case "${pkg}" in
+    wger)
+      if _have_systemd; then
+        systemctl stop wger wger-celery-worker wger-celery-beat
+        systemctl disable wger wger-celery-worker wger-celery-beat
+      fi
+      ;;
+    wger-pgsql)
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/prerm.pgsql
+      dbc_go wger-pgsql "$@"
+      ;;
+    wger-sqlite)
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/prerm.sqlite3
+      dbc_go wger-sqlite "$@"
+      ;;
+  esac
 }
 
 post_remove() {
   [ $# -eq 0 ] && set -- "${_DPKG_ARGV[@]}"
   [ $# -eq 0 ] && set -- remove
 
-  . /usr/share/debconf/confmodule
-  . /usr/share/dbconfig-common/dpkg/postrm.pgsql
-  dbc_go wger "$@"
+  local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
+  case "${pkg}" in
+    wger)
+      _have_systemd && systemctl daemon-reload
+      ;;
+    wger-pgsql)
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/postrm.pgsql
+      dbc_go wger-pgsql "$@"
+      ;;
+    wger-sqlite)
+      . /usr/share/debconf/confmodule
+      . /usr/share/dbconfig-common/dpkg/postrm.sqlite3
+      dbc_go wger-sqlite "$@"
+      ;;
+  esac
 }

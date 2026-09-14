@@ -6,17 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: Package to check (all = every package)
+        description: Package to check (all = every package, or a package name)
         required: true
         default: all
-        type: choice
-        options:
-          - all
-          - gatus
-          - glitchtip
-          - weblate
-          - wger
-          - fail2ban-ui
+        type: string
       upstream_version:
         description: Upstream version to compare (skips remote API when set)
         required: false
@@ -27,48 +20,54 @@ permissions:
   issues: write
 
 jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      has_packages: ${{ steps.gen.outputs.has_packages }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build check matrix
+        id: gen
+        env:
+          INPUT_PACKAGE: ${{ inputs.package }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          chmod +x scripts/discover.sh
+          ./scripts/discover.sh check-matrix > /tmp/check-matrix.json
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ -n "${INPUT_PACKAGE}" ] && [ "${INPUT_PACKAGE}" != "all" ]; then
+            python3 -c 'import json,sys; want=sys.argv[1]; data=json.load(open("/tmp/check-matrix.json")); json.dump([x for x in data if x["package"]==want], open("/tmp/check-matrix.json","w"))' "${INPUT_PACKAGE}"
+          fi
+          MATRIX="$(tr -d '\n' < /tmp/check-matrix.json)"
+          if [ "${MATRIX}" = "[]" ]; then
+            echo "has_packages=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has_packages=true" >> "${GITHUB_OUTPUT}"
+          fi
+          {
+            echo "matrix<<EOF"
+            echo "${MATRIX}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
   check-version:
+    needs: discover
+    if: needs.discover.outputs.has_packages == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: gatus
-            title_prefix: Gatus
-            body_hint: Update packages/gatus/VERSION and pkgver in packages/gatus/gatus.pacscript. See https://github.com/TwiN/gatus/releases
-          - package: glitchtip
-            title_prefix: GlitchTip
-            body_hint: Update packages/glitchtip/VERSION and pkgver in packages/glitchtip/glitchtip.pacscript.
-          - package: weblate
-            title_prefix: Weblate
-            body_hint: Update packages/weblate/VERSION and pkgver in packages/weblate/weblate.pacscript.
-          - package: wger
-            title_prefix: wger
-            body_hint: Update packages/wger/VERSION and pkgver in packages/wger/wger.pacscript. See https://github.com/wger-project/wger/releases
-          - package: fail2ban-ui
-            title_prefix: Fail2Ban UI
-            body_hint: Update packages/fail2ban-ui/VERSION and pkgver in packages/fail2ban-ui/fail2ban-ui.pacscript. See https://github.com/swissmakers/fail2ban-ui/releases
+        include: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Skip if not selected
-        id: skip
-        run: |
-          pkg="${{ inputs.package }}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$pkg" ] && [ "$pkg" != "all" ] && [ "$pkg" != "${{ matrix.package }}" ]; then
-            echo "run=false" >> "${GITHUB_OUTPUT}"
-          else
-            echo "run=true" >> "${GITHUB_OUTPUT}"
-          fi
-
       - name: Check for newer stable version
         id: check
-        if: steps.skip.outputs.run == 'true'
         env:
           PACKAGE: ${{ matrix.package }}
           VERSION: ${{ inputs.upstream_version }}
         run: |
-          chmod +x ./scripts/check-upstream-version.sh
+          chmod +x ./scripts/check-upstream-version.sh ./scripts/discover.sh
           set +e
           NEW_VERSION="$(./scripts/check-upstream-version.sh)"
           STATUS=$?
@@ -80,7 +79,7 @@ jobs:
           exit 0
 
       - name: Create GitHub issue for new version
-        if: steps.skip.outputs.run == 'true' && steps.check.outputs.status == '1'
+        if: steps.check.outputs.status == '1'
         env:
           GH_TOKEN: ${{ github.token }}
           NEW_VERSION: ${{ steps.check.outputs.new_version }}
@@ -92,9 +91,9 @@ jobs:
             exit 0
           fi
 
-          PACKAGED="$(tr -d '[:space:]' < "packages/${{ matrix.package }}/VERSION")"
+          PACKAGED="$(./scripts/discover.sh pkgver "${{ matrix.package }}")"
           gh label create new-version --description "Upstream version newer than packaged" --force 2>/dev/null || true
           gh issue create \
             --title "${TITLE}" \
             --label new-version \
-            --body "${{ matrix.title_prefix }} ${NEW_VERSION} is available (packaged: ${PACKAGED}). ${{ matrix.body_hint }}"
+            --body "${{ matrix.title_prefix }} ${NEW_VERSION} is available (packaged: ${PACKAGED}). Update \`pkgver\` in \`packages/${{ matrix.package }}/${{ matrix.package }}.pacscript\`."

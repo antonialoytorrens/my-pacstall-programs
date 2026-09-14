@@ -6,392 +6,169 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: Package to build (all = every package)
+        description: Package to build (all = every package, or a package name)
         required: true
         default: all
-        type: choice
-        options:
-          - all
-          - gatus
-          - glitchtip
-          - weblate
-          - wger
-          - fail2ban-ui
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  changes:
+  discover:
     runs-on: ubuntu-latest
     outputs:
-      gatus: ${{ steps.set.outputs.gatus }}
-      glitchtip: ${{ steps.set.outputs.glitchtip }}
-      weblate: ${{ steps.set.outputs.weblate }}
-      wger: ${{ steps.set.outputs.wger }}
-      fail2ban-ui: ${{ steps.set.outputs.fail2ban-ui }}
+      build_matrix: ${{ steps.gen.outputs.build_matrix }}
+      publish_matrix: ${{ steps.gen.outputs.publish_matrix }}
+      has_builds: ${{ steps.gen.outputs.has_builds }}
     steps:
       - uses: actions/checkout@v7
-
-      - uses: dorny/paths-filter@v3
-        id: filter
-        if: github.event_name != 'workflow_dispatch'
         with:
-          filters: |
-            gatus:
-              - 'packages/gatus/**'
-              - 'docker/gatus/**'
-              - 'packagelist'
-              - 'srclist'
-              - 'Makefile'
-              - 'settings.cfg'
-              - 'scripts/publish-prerelease.sh'
-              - '.github/workflows/build.yml'
-            glitchtip:
-              - 'packages/glitchtip/**'
-              - 'docker/glitchtip/**'
-              - 'packagelist'
-              - 'srclist'
-              - 'Makefile'
-              - 'settings.cfg'
-              - 'scripts/publish-prerelease.sh'
-              - '.github/workflows/build.yml'
-            weblate:
-              - 'packages/weblate/**'
-              - 'docker/weblate/**'
-              - 'packagelist'
-              - 'srclist'
-              - 'Makefile'
-              - 'settings.cfg'
-              - 'scripts/publish-prerelease.sh'
-              - '.github/workflows/build.yml'
-            wger:
-              - 'packages/wger/**'
-              - 'docker/wger/Dockerfile'
-              - 'packagelist'
-              - 'srclist'
-              - 'Makefile'
-              - 'settings.cfg'
-              - 'scripts/publish-prerelease.sh'
-              - '.github/workflows/build.yml'
-            fail2ban-ui:
-              - 'packages/fail2ban-ui/**'
-              - 'docker/fail2ban-ui/**'
-              - 'packagelist'
-              - 'srclist'
-              - 'Makefile'
-              - 'settings.cfg'
-              - 'scripts/publish-prerelease.sh'
-              - '.github/workflows/build.yml'
+          fetch-depth: 0
 
-      - name: Set package outputs
-        id: set
+      - name: Discover packages to build
+        id: gen
         env:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_PACKAGE: ${{ inputs.package }}
-          FILTER_GATUS: ${{ steps.filter.outputs.gatus }}
-          FILTER_GLITCHTIP: ${{ steps.filter.outputs.glitchtip }}
-          FILTER_WEBLATE: ${{ steps.filter.outputs.weblate }}
-          FILTER_WGER: ${{ steps.filter.outputs.wger }}
-          FILTER_FAIL2BAN_UI: ${{ steps.filter.outputs.fail2ban-ui }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
+          chmod +x scripts/discover.sh
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
-            pkg="${INPUT_PACKAGE}"
-            for name in gatus glitchtip weblate wger fail2ban-ui; do
-              if [ "$pkg" = "all" ] || [ "$pkg" = "$name" ]; then
-                echo "${name}=true" >> "${GITHUB_OUTPUT}"
-              else
-                echo "${name}=false" >> "${GITHUB_OUTPUT}"
-              fi
-            done
+            if [ "${INPUT_PACKAGE}" = "all" ] || [ -z "${INPUT_PACKAGE}" ]; then
+              mapfile -t PKGS < <(./scripts/discover.sh list)
+            else
+              PKGS=("${INPUT_PACKAGE}")
+            fi
           else
-            echo "gatus=${FILTER_GATUS:-false}" >> "${GITHUB_OUTPUT}"
-            echo "glitchtip=${FILTER_GLITCHTIP:-false}" >> "${GITHUB_OUTPUT}"
-            echo "weblate=${FILTER_WEBLATE:-false}" >> "${GITHUB_OUTPUT}"
-            echo "wger=${FILTER_WGER:-false}" >> "${GITHUB_OUTPUT}"
-            echo "fail2ban-ui=${FILTER_FAIL2BAN_UI:-false}" >> "${GITHUB_OUTPUT}"
+            mapfile -t PKGS < <(./scripts/discover.sh changed "${BEFORE_SHA}")
           fi
 
-  build-gatus:
-    needs: changes
-    if: needs.changes.outputs.gatus == 'true'
+          if [ "${#PKGS[@]}" -eq 0 ]; then
+            echo "No packages to build"
+            echo "has_builds=false" >> "${GITHUB_OUTPUT}"
+            echo "build_matrix=[]" >> "${GITHUB_OUTPUT}"
+            echo "publish_matrix=[]" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Packages: ${PKGS[*]}"
+          BUILD="$(./scripts/discover.sh build-matrix "${PKGS[@]}")"
+          PUBLISH="$(./scripts/discover.sh publish-matrix "${PKGS[@]}")"
+          echo "has_builds=true" >> "${GITHUB_OUTPUT}"
+          {
+            echo "build_matrix<<EOF"
+            echo "${BUILD}"
+            echo "EOF"
+            echo "publish_matrix<<EOF"
+            echo "${PUBLISH}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+  build:
+    needs: discover
+    if: needs.discover.outputs.has_builds == 'true'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            qemu: false
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            qemu: false
-          - arch: armhf
-            runner: ubuntu-latest
-            qemu: true
+        include: ${{ fromJSON(needs.discover.outputs.build_matrix) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
-    env:
-      DEBIAN_FRONTEND: noninteractive
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up QEMU
-        if: matrix.qemu
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build gatus .deb (${{ matrix.arch }})
-        run: make "gatus-${{ matrix.arch }}"
-      - name: Check artifact
-        run: |
-          PKG="$(ls gatus_*_${{ matrix.arch }}.deb)"
-          test -f "${PKG}"
-          dpkg-deb -I "${PKG}" >/dev/null
-          ls -lh "${PKG}"
-          for helper in gatus-pgsql gatus-sqlite; do
-            HELPER_PKG="$(ls ${helper}_*_all.deb)"
-            test -f "${HELPER_PKG}"
-            dpkg-deb -I "${HELPER_PKG}" >/dev/null
-            ls -lh "${HELPER_PKG}"
-          done
-      - uses: actions/upload-artifact@v7
-        with:
-          name: gatus-deb-${{ matrix.arch }}
-          path: gatus_*_${{ matrix.arch }}.deb
-      - uses: actions/upload-artifact@v7
-        if: matrix.arch == 'amd64'
-        with:
-          name: gatus-deb-all
-          path: |
-            gatus-pgsql_*_all.deb
-            gatus-sqlite_*_all.deb
-
-  build-glitchtip:
-    needs: changes
-    if: needs.changes.outputs.glitchtip == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      DEBIAN_FRONTEND: noninteractive
-      GLITCHTIP_DOMAIN: ci.example.test
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build glitchtip .deb (amd64)
-        run: make glitchtip-amd64
-      - name: Check artifact
-        run: |
-          PKG="$(ls glitchtip_*.deb)"
-          test -f "${PKG}"
-          dpkg-deb -I "${PKG}" >/dev/null
-          ls -lh "${PKG}"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: glitchtip-deb-amd64
-          path: glitchtip_*_amd64.deb
-
-  build-weblate:
-    needs: changes
-    if: needs.changes.outputs.weblate == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            qemu: false
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            qemu: false
-          - arch: armhf
-            runner: ubuntu-latest
-            qemu: true
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
-    env:
-      DEBIAN_FRONTEND: noninteractive
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up QEMU
-        if: matrix.qemu
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build weblate .deb (${{ matrix.arch }})
-        run: make "weblate-${{ matrix.arch }}"
-      - name: Check artifact
-        run: |
-          PKG="$(ls weblate_*_${{ matrix.arch }}.deb)"
-          test -f "${PKG}"
-          dpkg-deb -I "${PKG}" >/dev/null
-          ls -lh "${PKG}"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: weblate-deb-${{ matrix.arch }}
-          path: weblate_*_${{ matrix.arch }}.deb
-
-  build-wger:
-    needs: changes
-    if: needs.changes.outputs.wger == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            qemu: false
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            qemu: false
-          - arch: armhf
-            runner: ubuntu-latest
-            qemu: true
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     env:
       DEBIAN_FRONTEND: noninteractive
       WGER_DOMAIN: ci.example.test
+      GLITCHTIP_DOMAIN: ci.example.test
     steps:
       - uses: actions/checkout@v7
+
       - name: Set up QEMU
         if: matrix.qemu
         uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Build wger .deb (${{ matrix.arch }})
-        run: make "wger-${{ matrix.arch }}"
-      - name: Check artifact
+
+      - name: Build ${{ matrix.package }} (${{ matrix.distribution }}/${{ matrix.release }} ${{ matrix.arch }})
+        run: make "${{ matrix.target }}"
+
+      - name: Tag artifacts with distribution/release
+        if: matrix.multi_distro
         run: |
-          PKG="$(ls wger_*_${{ matrix.arch }}.deb)"
+          suffix="${{ matrix.distribution }}.${{ matrix.release }}"
+          shopt -s nullglob
+          for f in ${{ matrix.package }}_*_${{ matrix.arch }}.deb ${{ matrix.package }}-*_*_all.deb; do
+            [ -f "$f" ] || continue
+            base="${f%.deb}"
+            arch_part="${base##*_}"
+            name_ver="${base%_*}"
+            # skip if already tagged
+            case "${name_ver}" in
+              *"~${suffix}") continue ;;
+            esac
+            mv "$f" "${name_ver}~${suffix}_${arch_part}.deb"
+          done
+          ls -lh ./*.deb || true
+
+      - name: Check artifacts
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.multi_distro }}" = "true" ]; then
+            suffix="~${{ matrix.distribution }}.${{ matrix.release }}"
+            PKG="$(ls ${{ matrix.package }}_*${suffix}_${{ matrix.arch }}.deb)"
+          else
+            PKG="$(ls ${{ matrix.package }}_*_${{ matrix.arch }}.deb)"
+          fi
           test -f "${PKG}"
           dpkg-deb -I "${PKG}" >/dev/null
           ls -lh "${PKG}"
+          # Helper / split packages (Architecture: all), if any
+          shopt -s nullglob
+          if [ "${{ matrix.multi_distro }}" = "true" ]; then
+            helpers=(${{ matrix.package }}-*_*~${{ matrix.distribution }}.${{ matrix.release }}_all.deb)
+          else
+            helpers=(${{ matrix.package }}-*_*_all.deb)
+          fi
+          for h in "${helpers[@]:-}"; do
+            [ -f "$h" ] || continue
+            dpkg-deb -I "$h" >/dev/null
+            ls -lh "$h"
+          done
+
       - uses: actions/upload-artifact@v7
         with:
-          name: wger-deb-${{ matrix.arch }}
-          path: wger_*_${{ matrix.arch }}.deb
+          name: ${{ matrix.package }}-deb-${{ matrix.distribution }}-${{ matrix.release }}-${{ matrix.arch }}
+          path: |
+            ${{ matrix.package }}_*_${{ matrix.arch }}.deb
+            ${{ matrix.package }}_*~${{ matrix.distribution }}.${{ matrix.release }}_${{ matrix.arch }}.deb
 
-  publish-gatus:
-    needs: [changes, build-gatus]
-    if: needs.changes.outputs.gatus == 'true' && needs.build-gatus.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
+      - uses: actions/upload-artifact@v7
+        if: matrix.arch == 'amd64'
         with:
-          pattern: gatus-deb-*
-          merge-multiple: true
-      - name: Publish gatus prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
-          PACKAGE: gatus
-        run: bash scripts/publish-prerelease.sh
+          name: ${{ matrix.package }}-deb-${{ matrix.distribution }}-${{ matrix.release }}-all
+          path: |
+            ${{ matrix.package }}-*_*_all.deb
+            ${{ matrix.package }}-*_*~${{ matrix.distribution }}.${{ matrix.release }}_all.deb
+          if-no-files-found: ignore
 
-  publish-glitchtip:
-    needs: [changes, build-glitchtip]
-    if: needs.changes.outputs.glitchtip == 'true' && needs.build-glitchtip.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: glitchtip-deb-*
-          merge-multiple: true
-      - name: Publish glitchtip prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
-          PACKAGE: glitchtip
-        run: bash scripts/publish-prerelease.sh
-
-  publish-weblate:
-    needs: [changes, build-weblate]
-    if: needs.changes.outputs.weblate == 'true' && needs.build-weblate.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: weblate-deb-*
-          merge-multiple: true
-      - name: Publish weblate prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
-          PACKAGE: weblate
-        run: bash scripts/publish-prerelease.sh
-
-  publish-wger:
-    needs: [changes, build-wger]
-    if: needs.changes.outputs.wger == 'true' && needs.build-wger.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: wger-deb-*
-          merge-multiple: true
-      - name: Publish wger prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_TOKEN: ${{ github.token }}
-          PACKAGE: wger
-        run: bash scripts/publish-prerelease.sh
-
-  build-fail2ban-ui:
-    needs: changes
-    if: needs.changes.outputs.fail2ban-ui == 'true'
+  publish:
+    needs: [discover, build]
+    if: needs.discover.outputs.has_builds == 'true' && needs.build.result == 'success'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-            qemu: false
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            qemu: false
-          - arch: armhf
-            runner: ubuntu-latest
-            qemu: true
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
-    env:
-      DEBIAN_FRONTEND: noninteractive
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up QEMU
-        if: matrix.qemu
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Build fail2ban-ui .deb (${{ matrix.arch }})
-        run: make "fail2ban-ui-${{ matrix.arch }}"
-      - name: Check artifact
-        run: |
-          PKG="$(ls fail2ban-ui_*_${{ matrix.arch }}.deb)"
-          test -f "${PKG}"
-          dpkg-deb -I "${PKG}" >/dev/null
-          ls -lh "${PKG}"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: fail2ban-ui-deb-${{ matrix.arch }}
-          path: fail2ban-ui_*_${{ matrix.arch }}.deb
-
-  publish-fail2ban-ui:
-    needs: [changes, build-fail2ban-ui]
-    if: needs.changes.outputs.fail2ban-ui == 'true' && needs.build-fail2ban-ui.result == 'success'
+        include: ${{ fromJSON(needs.discover.outputs.publish_matrix) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
-          pattern: fail2ban-ui-deb-*
+          pattern: ${{ matrix.package }}-deb-*
           merge-multiple: true
-      - name: Publish fail2ban-ui prerelease
+
+      - name: Publish ${{ matrix.package }} prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
-          PACKAGE: fail2ban-ui
+          PACKAGE: ${{ matrix.package }}
         run: bash scripts/publish-prerelease.sh

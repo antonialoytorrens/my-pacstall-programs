@@ -1,8 +1,11 @@
+fail2ban-ui
 gatus:pkgbase
 gatus:gatus
 gatus:gatus-pgsql
 gatus:gatus-sqlite
 glitchtip
 weblate
-wger
-fail2ban-ui
+wger:pkgbase
+wger:wger
+wger:wger-pgsql
+wger:wger-sqlite

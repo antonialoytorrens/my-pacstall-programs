@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # cleanup-old-prereleases.sh — keep the newest KEEP_COUNT GitHub prereleases per package.
-# Packages are discovered from packages/*/VERSION (same convention as publish-prerelease.sh).
+# Packages are discovered via scripts/discover.sh (packages/*/ + docker/*/).
 # Stable (non-prerelease) releases are never touched.
 set -euo pipefail
 
@@ -9,22 +9,17 @@ set -euo pipefail
 KEEP_COUNT="${KEEP_COUNT:-3}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DISCOVER="${REPO_ROOT}/scripts/discover.sh"
 
 if ! [[ "${KEEP_COUNT}" =~ ^[1-9][0-9]*$ ]]; then
   echo "KEEP_COUNT must be a positive integer, got: ${KEEP_COUNT}" >&2
   exit 1
 fi
 
-mapfile -t PACKAGES < <(
-  for d in "${REPO_ROOT}"/packages/*/; do
-    [ -d "${d}" ] || continue
-    [ -f "${d}VERSION" ] || continue
-    basename "${d}"
-  done | sort
-)
+mapfile -t PACKAGES < <("${DISCOVER}" list)
 
 if [ "${#PACKAGES[@]}" -eq 0 ]; then
-  echo "No packages found under packages/*/VERSION" >&2
+  echo "No packages found (need packages/<name>/<name>.pacscript + docker/<name>/Dockerfile*)" >&2
   exit 1
 fi
 
@@ -61,7 +56,6 @@ for row in "${ROWS[@]:-}"; do
   if [ -z "${matched}" ]; then
     continue
   fi
-  # publishedAt|tag — sortable by ISO-8601 date ascending
   PKG_ROWS["${matched}"]+="${published}|${tag}"$'\n'
 done
 

@@ -1,6 +1,6 @@
 pkgname="weblate"
-pkgver="2026.7.1"
-pkgrel="4"
+pkgver="2026.9.1"
+pkgrel="1"
 arch=('amd64' 'arm64' 'armhf')
 url="https://weblate.org/"
 license=('GPL-3.0-or-later')
@@ -19,7 +19,7 @@ _psycopg_c_ver="3.3.4"
 _DPKG_ARGV=("$@")
 
 source=(
-  "https://files.pythonhosted.org/packages/07/40/1367940d6615d61df263b88a3c661c39b30f1b2611029724e42c7c0c2435/weblate-${pkgver}.tar.gz"
+  "https://files.pythonhosted.org/packages/41/fa/d8025e1120dfbb44eb4783d6d41418070af7bbff09a2fd1db3b88f542c18/weblate-${pkgver}.tar.gz"
   "weblate.env.in"
   "weblate_settings.py.in"
   "weblate.config.in"

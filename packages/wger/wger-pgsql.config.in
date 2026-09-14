@@ -4,4 +4,4 @@ set -e
 dbc_dbname="@WGER_DB_NAME@"
 dbc_dbuser="@WGER_DB_USER@"
 . /usr/share/dbconfig-common/dpkg/config.pgsql
-dbc_go wger "$@"
+dbc_go wger-pgsql "$@"

@@ -1,7 +1,7 @@
 pkgbase="gatus"
 pkgname=("gatus" "gatus-pgsql" "gatus-sqlite")
 pkgver="5.36.0"
-pkgrel="3"
+pkgrel="4"
 arch=('amd64' 'arm64' 'armhf')
 url="https://gatus.io/"
 license=('Apache-2.0')
@@ -137,7 +137,10 @@ EOF
   chmod 640 "${out}"
 }
 
+_have_systemd() { [ -d /run/systemd/system ]; }
+
 _gatus_restart() {
+  _have_systemd || return 0
   systemctl daemon-reload
   systemctl try-restart gatus.service
 }
@@ -166,8 +169,10 @@ post_install() {
   case "${pkg}" in
     gatus)
       _gatus_ensure_user
-      systemctl daemon-reload
-      systemctl enable --now gatus.service
+      if _have_systemd; then
+        systemctl daemon-reload
+        systemctl enable --now gatus.service
+      fi
       ;;
 
     gatus-pgsql)
@@ -231,8 +236,10 @@ pre_remove() {
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
     gatus)
-      systemctl stop gatus.service
-      systemctl disable gatus.service
+      if _have_systemd; then
+        systemctl stop gatus.service
+        systemctl disable gatus.service
+      fi
       ;;
     gatus-pgsql)
       . /usr/share/debconf/confmodule
@@ -256,7 +263,7 @@ post_remove() {
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
     gatus)
-      systemctl daemon-reload
+      _have_systemd && systemctl daemon-reload
       ;;
     gatus-pgsql)
       . /usr/share/debconf/confmodule

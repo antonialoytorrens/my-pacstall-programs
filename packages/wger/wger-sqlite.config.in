@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+dbc_dbname="@WGER_DB_NAME@"
+. /usr/share/dbconfig-common/dpkg/config.sqlite3
+dbc_go wger-sqlite "$@"

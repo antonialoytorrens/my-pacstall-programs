@@ -299,8 +299,18 @@ post_install() {
 
       if grep -q '__JWTPRIVATE_PLACEHOLDER__' "$env_file"; then
         local jwt_output jwt_private jwt_public
-        jwt_output=$(env DJANGO_SETTINGS_MODULE=settings.main PYTHONPATH="${src}" \
-          "${venv}/bin/django-admin" generate-jwt-keys)
+        # Dummy sqlite: django-admin loads settings before wger-pgsql/sqlite (CI apt-get install).
+        jwt_output=$(
+          set -a
+          # shellcheck disable=SC1091
+          . "${env_file}"
+          set +a
+          export DJANGO_DB_ENGINE=django.db.backends.sqlite3
+          export DJANGO_DB_DATABASE=:memory:
+          export DJANGO_SETTINGS_MODULE=settings.main
+          export PYTHONPATH="${src}"
+          "${venv}/bin/django-admin" generate-jwt-keys
+        )
         jwt_private=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PRIVATE_KEY=' | cut -d= -f2-)
         jwt_public=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PUBLIC_KEY=' | cut -d= -f2-)
         sed -i "s|__JWTPRIVATE_PLACEHOLDER__|${jwt_private}|" "$env_file"

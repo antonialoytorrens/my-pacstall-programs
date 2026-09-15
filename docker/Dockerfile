@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1
+# Generated from Dockerfile.in — do not edit by hand (scripts/render-dockerfiles.sh).
 # Platform is set by CI/Makefile via --platform (pacstall cannot cross-build).
 FROM debian:trixie AS builder
 
@@ -6,22 +7,29 @@ ARG PACSTALL_VERSION=6.4.2
 ARG PACSTALL_REVISION=pacstall1
 ARG SPDX_LICENSES_VERSION=3.27.0
 ARG SPDX_LICENSES_REVISION=+ds-1
-ARG WGER_DOMAIN=wger.localhost.local
+ARG PACKAGE
 ENV DEBIAN_FRONTEND=noninteractive
-ENV WGER_DOMAIN=${WGER_DOMAIN}
 
-# rustc in trixie main is too old for cryptography/nh3 let-chains; same on all arches.
 RUN echo "deb http://deb.debian.org/debian trixie-backports main" \
       > /etc/apt/sources.list.d/backports.list \
+  && printf '%s\n' \
+       'Package: golang*' \
+       'Pin: release n=trixie-backports' \
+       'Pin-Priority: 990' \
+       '' \
+       'Package: rustc' \
+       'Pin: release n=trixie-backports' \
+       'Pin-Priority: 990' \
+       '' \
+       'Package: cargo' \
+       'Pin: release n=trixie-backports' \
+       'Pin-Priority: 990' \
+       > /etc/apt/preferences.d/toolchain-backports \
   && apt-get update -qq \
   && apt-get install -y -qq --no-install-recommends \
-    ca-certificates sudo curl \
-    python3 python3-venv python3-dev python3-pip build-essential pkg-config patch \
-    libpq-dev zlib1g-dev libjpeg62-turbo-dev libwebp-dev \
-    libssl-dev libffi-dev \
-    gettext git tzdata \
-    nodejs npm \
-  && apt-get install -y -qq -t trixie-backports --no-install-recommends rustc cargo
+       ca-certificates sudo curl git \
+  && apt-get install -y -qq -t trixie-backports --no-install-recommends \
+       golang rustc cargo
 
 ADD https://github.com/pacstall/pacstall/releases/download/${PACSTALL_VERSION}/pacstall_${PACSTALL_VERSION}-${PACSTALL_REVISION}_all.deb \
   /var/cache/apt/archives/pacstall_${PACSTALL_VERSION}-${PACSTALL_REVISION}_all.deb
@@ -36,14 +44,20 @@ WORKDIR /build
 COPY packagelist srclist /build/
 COPY packages/ /build/packages/
 
-# Helpers depend on wger via apt; build main first, install it, then the splits.
-RUN sed -i "s|_wger_domain=\"wger.localhost.local\"|_wger_domain=\"${WGER_DOMAIN}\"|" \
-      packages/wger/wger.pacscript \
-  && set -e \
-  && pacstall -BPNs -I packages/wger/wger.pacscript:wger \
-  && apt-get install -y -qq --no-install-recommends ./wger_*.deb \
-  && pacstall -BPNs -I packages/wger/wger.pacscript:wger-pgsql \
-  && pacstall -BPNs -I packages/wger/wger.pacscript:wger-sqlite \
+# Split packages: build pkgbase first, install it, then helpers. Else one -I.
+RUN set -e \
+  && ps="packages/${PACKAGE}/${PACKAGE}.pacscript" \
+  && if grep -qE '^pkgname=\(' "${ps}"; then \
+       pacstall -BPNs -I "${ps}:${PACKAGE}" \
+       && apt-get install -y -qq --no-install-recommends ./${PACKAGE}_*.deb \
+       && names="$(sed -nE 's/^pkgname=\((.*)\).*/\1/p' "${ps}" | head -n1 | tr -d "'\"")" \
+       && for n in ${names}; do \
+            [ "${n}" = "${PACKAGE}" ] && continue; \
+            pacstall -BPNs -I "${ps}:${n}"; \
+          done; \
+     else \
+       pacstall -BPNs -I "${ps}"; \
+     fi \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/pacstall /var/cache/apt/archives/*
 

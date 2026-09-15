@@ -76,8 +76,6 @@ jobs:
     timeout-minutes: ${{ matrix.timeout_minutes }}
     env:
       DEBIAN_FRONTEND: noninteractive
-      WGER_DOMAIN: ci.example.test
-      GLITCHTIP_DOMAIN: ci.example.test
     steps:
       - uses: actions/checkout@v7
 
@@ -94,7 +92,7 @@ jobs:
       - name: Tag artifacts with distribution/release
         if: matrix.multi_distro
         run: |
-          suffix="${{ matrix.distribution }}.${{ matrix.release }}"
+          suffix="${{ matrix.deb_suffix }}"
           shopt -s nullglob
           for f in ${{ matrix.package }}_*_${{ matrix.arch }}.deb ${{ matrix.package }}-*_*_all.deb; do
             [ -f "$f" ] || continue
@@ -113,7 +111,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ matrix.multi_distro }}" = "true" ]; then
-            suffix="~${{ matrix.distribution }}.${{ matrix.release }}"
+            suffix="~${{ matrix.deb_suffix }}"
             PKG="$(ls ${{ matrix.package }}_*${suffix}_${{ matrix.arch }}.deb)"
           else
             PKG="$(ls ${{ matrix.package }}_*_${{ matrix.arch }}.deb)"
@@ -124,7 +122,7 @@ jobs:
           # Helper / split packages (Architecture: all), if any
           shopt -s nullglob
           if [ "${{ matrix.multi_distro }}" = "true" ]; then
-            helpers=(${{ matrix.package }}-*_*~${{ matrix.distribution }}.${{ matrix.release }}_all.deb)
+            helpers=(${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_all.deb)
           else
             helpers=(${{ matrix.package }}-*_*_all.deb)
           fi
@@ -136,18 +134,18 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-deb-${{ matrix.distribution }}-${{ matrix.release }}-${{ matrix.arch }}
+          name: ${{ matrix.package }}-deb-${{ matrix.deb_suffix }}-${{ matrix.arch }}
           path: |
             ${{ matrix.package }}_*_${{ matrix.arch }}.deb
-            ${{ matrix.package }}_*~${{ matrix.distribution }}.${{ matrix.release }}_${{ matrix.arch }}.deb
+            ${{ matrix.package }}_*~${{ matrix.deb_suffix }}_${{ matrix.arch }}.deb
 
       - uses: actions/upload-artifact@v7
         if: matrix.arch == 'amd64'
         with:
-          name: ${{ matrix.package }}-deb-${{ matrix.distribution }}-${{ matrix.release }}-all
+          name: ${{ matrix.package }}-deb-${{ matrix.deb_suffix }}-all
           path: |
             ${{ matrix.package }}-*_*_all.deb
-            ${{ matrix.package }}-*_*~${{ matrix.distribution }}.${{ matrix.release }}_all.deb
+            ${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_all.deb
           if-no-files-found: ignore
 
   publish:

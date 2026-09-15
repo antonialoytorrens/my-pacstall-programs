@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # discover.sh — convention-based package discovery (no per-package meta).
 #
-# A package exists when both are present:
-#   packages/<name>/<name>.pacscript
-#   docker/<name>/Dockerfile*
+# A package exists when packages/<name>/<name>.pacscript is present.
+# Distros come from shared docker/Dockerfile* (not docker/<pkg>/).
 #
 # Version = literal pkgver="..." in the pacscript (no bash expansion).
 #
@@ -12,7 +11,7 @@
 #   discover.sh pkgver <pkg>
 #   discover.sh arches <pkg>
 #   discover.sh pkgnames <pkg>
-#   discover.sh dockerfiles <pkg>
+#   discover.sh dockerfiles
 #   discover.sh packagelist
 #   discover.sh srclist
 #   discover.sh make-targets
@@ -21,11 +20,10 @@
 #   discover.sh publish-matrix [pkg...]
 #   discover.sh check-matrix
 #   discover.sh changed [base_sha]
-#   discover.sh domain-env <pkg>
+#   discover.sh upstream <pkg>
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DISCOVER="${ROOT}/scripts/discover.sh"
 
 pacscript_path() {
   local pkg="$1"
@@ -34,10 +32,7 @@ pacscript_path() {
 
 is_package() {
   local pkg="$1"
-  local ps df
-  ps="$(pacscript_path "${pkg}")"
-  [ -f "${ps}" ] || return 1
-  compgen -G "${ROOT}/docker/${pkg}/Dockerfile*" >/dev/null
+  [ -f "$(pacscript_path "${pkg}")" ]
 }
 
 list_packages() {
@@ -76,7 +71,6 @@ arches_of() {
     echo "amd64"
     return 0
   fi
-  # arch=('amd64' 'arm64' 'armhf') or arch=("amd64")
   printf '%s\n' "${line}" | sed -E "s/^arch=\(//; s/\).*//; s/['\"]//g" | tr -s '[:space:]' '\n' | grep -v '^$' || true
 }
 
@@ -84,7 +78,6 @@ pkgnames_of() {
   local pkg="$1"
   local ps line
   ps="$(pacscript_path "${pkg}")"
-  # pkgname="foo" or pkgname=("a" "b")
   if line="$(grep -E '^pkgname=\(' "${ps}" | head -n1)"; then
     printf '%s\n' "${line}" | sed -E "s/^pkgname=\(//; s/\).*//; s/['\"]//g" | tr -s '[:space:]' '\n' | grep -v '^$'
     return 0
@@ -96,19 +89,17 @@ pkgnames_of() {
   printf '%s\n' "${pkg}"
 }
 
-# Print: dockerfile|distribution|release
+# Print: dockerfile|distribution|release  (shared docker/, skip Dockerfile.in)
 dockerfiles_of() {
-  local pkg="$1"
   local f base rest distro release
-  # Default Dockerfile first, then variants
-  if [ -f "${ROOT}/docker/${pkg}/Dockerfile" ]; then
+  if [ -f "${ROOT}/docker/Dockerfile" ]; then
     printf '%s\n' "Dockerfile|debian|trixie"
   fi
-  for f in "${ROOT}/docker/${pkg}"/Dockerfile.*; do
+  for f in "${ROOT}/docker"/Dockerfile.*; do
     [ -f "${f}" ] || continue
     base="$(basename "${f}")"
+    [ "${base}" = "Dockerfile.in" ] && continue
     rest="${base#Dockerfile.}"
-    # Dockerfile.ubuntu-26.04 → ubuntu / 26.04
     if [[ "${rest}" =~ ^([a-z]+)-(.+)$ ]]; then
       distro="${BASH_REMATCH[1]}"
       release="${BASH_REMATCH[2]}"
@@ -121,14 +112,27 @@ dockerfiles_of() {
 }
 
 dockerfile_count() {
-  local pkg="$1"
-  dockerfiles_of "${pkg}" | wc -l
+  dockerfiles_of | wc -l
 }
 
-domain_env_of() {
-  # Convention: fail2ban-ui → FAIL2BAN_UI_DOMAIN
-  local pkg="$1"
-  printf '%s_DOMAIN\n' "$(printf '%s' "${pkg}" | tr 'a-z-' 'A-Z_')"
+deb_suffix_of() {
+  local distro="$1" release="$2"
+  case "${distro}" in
+    debian)
+      case "${release}" in
+        trixie) printf '%s\n' "debian13" ;;
+        bookworm) printf '%s\n' "debian12" ;;
+        *) echo "unknown debian release: ${release}" >&2; return 1 ;;
+      esac
+      ;;
+    ubuntu)
+      printf '%s\n' "ubuntu${release}"
+      ;;
+    *)
+      echo "unknown distro: ${distro}" >&2
+      return 1
+      ;;
+  esac
 }
 
 emit_packagelist() {
@@ -153,8 +157,8 @@ emit_srclist() {
 
 make_targets() {
   local pkg arch distro release dockerfile default_df count
+  count="$(dockerfile_count)"
   while IFS= read -r pkg; do
-    count="$(dockerfile_count "${pkg}")"
     default_df=""
     while IFS='|' read -r dockerfile distro release; do
       [ -n "${dockerfile}" ] || continue
@@ -168,8 +172,7 @@ make_targets() {
           printf '%s-%s-%s-%s\n' "${pkg}" "${distro}" "${release}" "${arch}"
         fi
       done
-    done < <(dockerfiles_of "${pkg}")
-    # Alias pkg-arch → default Dockerfile when multi-distro
+    done < <(dockerfiles_of)
     if [ "${count}" -gt 1 ] && [ -n "${default_df}" ]; then
       for arch in $(arches_of "${pkg}" | tr '\n' ' '); do
         printf '%s-%s\n' "${pkg}" "${arch}"
@@ -180,7 +183,6 @@ make_targets() {
 
 parse_target() {
   # Sets: PKG DISTRO RELEASE ARCH DOCKERFILE TARGET_KIND
-  # TARGET_KIND=alias|full|simple
   local target="$1"
   local pkg arch distro release rest
   PKG="" DISTRO="" RELEASE="" ARCH="" DOCKERFILE="" TARGET_KIND=""
@@ -193,20 +195,17 @@ parse_target() {
     return 1
   fi
 
-  # rest = pkg  OR  pkg-distro-release
   if is_package "${rest}"; then
     PKG="${rest}"
     ARCH="${arch}"
-    # default dockerfile
-    if [ -f "${ROOT}/docker/${PKG}/Dockerfile" ]; then
+    if [ -f "${ROOT}/docker/Dockerfile" ]; then
       DOCKERFILE="Dockerfile"
       DISTRO="debian"
       RELEASE="trixie"
     else
-      # first variant
-      IFS='|' read -r DOCKERFILE DISTRO RELEASE < <(dockerfiles_of "${PKG}" | head -n1)
+      IFS='|' read -r DOCKERFILE DISTRO RELEASE < <(dockerfiles_of | head -n1)
     fi
-    if [ "$(dockerfile_count "${PKG}")" -gt 1 ]; then
+    if [ "$(dockerfile_count)" -gt 1 ]; then
       TARGET_KIND="alias"
     else
       TARGET_KIND="simple"
@@ -214,14 +213,12 @@ parse_target() {
     return 0
   fi
 
-  # Try pkg-distro-release by peeling known packages (longest name first)
   local cand
   mapfile -t pkgs < <(list_packages | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
   for cand in "${pkgs[@]}"; do
     case "${rest}" in
       "${cand}"-*)
         local suffix="${rest#"${cand}"-}"
-        # suffix = distro-release (release may contain dots)
         if [[ "${suffix}" =~ ^([a-z]+)-(.+)$ ]]; then
           distro="${BASH_REMATCH[1]}"
           release="${BASH_REMATCH[2]}"
@@ -234,8 +231,8 @@ parse_target() {
           else
             DOCKERFILE="Dockerfile.${distro}-${release}"
           fi
-          if [ ! -f "${ROOT}/docker/${PKG}/${DOCKERFILE}" ]; then
-            echo "dockerfile not found: docker/${PKG}/${DOCKERFILE}" >&2
+          if [ ! -f "${ROOT}/docker/${DOCKERFILE}" ]; then
+            echo "dockerfile not found: docker/${DOCKERFILE}" >&2
             return 1
           fi
           TARGET_KIND="full"
@@ -261,8 +258,7 @@ platform_of() {
 runner_of() {
   case "$1" in
     amd64) echo ubuntu-latest ;;
-    arm64) echo ubuntu-24.04-arm ;;
-    armhf) echo ubuntu-latest ;;
+    arm64|armhf) echo ubuntu-24.04-arm ;;
     *) echo ubuntu-latest ;;
   esac
 }
@@ -281,25 +277,19 @@ json_escape() {
 build_target() {
   local target="$1"
   parse_target "${target}"
-  local platform domain_var domain_val args=()
+  local platform args=()
   platform="$(platform_of "${ARCH}")"
 
-  # Ensure packagelist/srclist are fresh
   emit_packagelist > "${ROOT}/packagelist"
   emit_srclist > "${ROOT}/srclist"
 
-  domain_var="$(domain_env_of "${PKG}")"
-  domain_val="${!domain_var-}"
-
   args=(docker buildx build --platform "${platform}"
-    -f "${ROOT}/docker/${PKG}/${DOCKERFILE}"
+    -f "${ROOT}/docker/${DOCKERFILE}"
+    --build-arg "PACKAGE=${PKG}"
     --target artifact
     --output "${ROOT}/."
+    "${ROOT}"
   )
-  if [ -n "${domain_val}" ]; then
-    args+=(--build-arg "${domain_var}=${domain_val}")
-  fi
-  args+=("${ROOT}")
 
   echo "+ ${args[*]}"
   "${args[@]}"
@@ -311,30 +301,31 @@ build_matrix_json() {
   if [ "${#selected[@]}" -eq 0 ]; then
     mapfile -t selected < <(list_packages)
   fi
+  multi=false
+  if [ "$(dockerfile_count)" -gt 1 ]; then
+    multi=true
+  fi
   printf '['
   for pkg in "${selected[@]}"; do
     [ -n "${pkg}" ] || continue
     is_package "${pkg}" || continue
-    multi=false
-    if [ "$(dockerfile_count "${pkg}")" -gt 1 ]; then
-      multi=true
-    fi
     while IFS='|' read -r dockerfile distro release; do
       [ -n "${dockerfile}" ] || continue
       while IFS= read -r arch; do
         [ -n "${arch}" ] || continue
-        local target
+        local target suffix
         if [ "${multi}" = true ]; then
           target="${pkg}-${distro}-${release}-${arch}"
         else
           target="${pkg}-${arch}"
         fi
+        suffix="$(deb_suffix_of "${distro}" "${release}")"
         if [ "${first}" = true ]; then
           first=false
         else
           printf ','
         fi
-        printf '{"package":%s,"distribution":%s,"release":%s,"dockerfile":%s,"arch":%s,"runner":%s,"qemu":%s,"target":%s,"multi_distro":%s,"timeout_minutes":180,"domain_env":%s}' \
+        printf '{"package":%s,"distribution":%s,"release":%s,"dockerfile":%s,"arch":%s,"runner":%s,"qemu":%s,"target":%s,"multi_distro":%s,"timeout_minutes":180,"deb_suffix":%s}' \
           "$(json_escape "${pkg}")" \
           "$(json_escape "${distro}")" \
           "$(json_escape "${release}")" \
@@ -344,9 +335,9 @@ build_matrix_json() {
           "$(qemu_of "${arch}")" \
           "$(json_escape "${target}")" \
           "${multi}" \
-          "$(json_escape "$(domain_env_of "${pkg}")")"
+          "$(json_escape "${suffix}")"
       done < <(arches_of "${pkg}")
-    done < <(dockerfiles_of "${pkg}")
+    done < <(dockerfiles_of)
   done
   printf ']\n'
 }
@@ -398,7 +389,7 @@ changed_packages() {
     force_all=true
   else
     changed="$(git -C "${ROOT}" diff --name-only "${base_sha}"...HEAD 2>/dev/null || true)"
-    if printf '%s\n' "${changed}" | grep -qE '^(Makefile|settings\.cfg|packagelist|srclist|scripts/|\.github/workflows/build\.yml)'; then
+    if printf '%s\n' "${changed}" | grep -qE '^(Makefile|settings\.cfg|anitya\.cfg|packagelist|srclist|scripts/|docker/|\.github/workflows/build\.yml)'; then
       force_all=true
     fi
   fi
@@ -410,7 +401,7 @@ changed_packages() {
 
   local out=()
   for pkg in "${ALL[@]}"; do
-    if printf '%s\n' "${changed}" | grep -qE "^(packages|docker)/${pkg}/"; then
+    if printf '%s\n' "${changed}" | grep -qE "^packages/${pkg}/"; then
       out+=("${pkg}")
     fi
   done
@@ -421,31 +412,18 @@ changed_packages() {
 
 resolve_upstream() {
   # Prints: github:owner/repo  OR  anitya:ID
-  # 1) anitya.json (package → Anitya project id)
+  # 1) anitya.cfg (package=id)
   # 2) infer github from pacscript source=/url=
   local pkg="$1"
   local ps line id
 
-  id="$(python3 -c '
-import json, sys
-pkg = sys.argv[1]
-path = sys.argv[2]
-try:
-    data = json.load(open(path))
-except FileNotFoundError:
-    sys.exit(0)
-val = data.get(pkg)
-if val is None:
-    sys.exit(0)
-print(int(val))
-' "${pkg}" "${ROOT}/anitya.json" 2>/dev/null || true)"
+  id="$(sed -n "s/^${pkg}=//p" "${ROOT}/anitya.cfg" 2>/dev/null | head -n1 || true)"
   if [ -n "${id}" ]; then
     printf 'anitya:%s\n' "${id}"
     return 0
   fi
 
   ps="$(pacscript_path "${pkg}")"
-  # Prefer source= URLs (skip maintainer lines)
   line="$(grep -E 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' "${ps}" \
     | grep -v maintainer \
     | head -n1 || true)"
@@ -464,7 +442,7 @@ print(int(val))
     fi
   fi
 
-  echo "cannot resolve upstream for ${pkg}: add an entry to anitya.json or a GitHub URL in the pacscript" >&2
+  echo "cannot resolve upstream for ${pkg}: add an entry to anitya.cfg or a GitHub URL in the pacscript" >&2
   return 1
 }
 
@@ -485,7 +463,7 @@ case "${cmd}" in
     pkgnames_of "${1:?package required}"
     ;;
   dockerfiles)
-    dockerfiles_of "${1:?package required}"
+    dockerfiles_of
     ;;
   packagelist)
     emit_packagelist
@@ -511,14 +489,11 @@ case "${cmd}" in
   changed)
     changed_packages "${1:-}"
     ;;
-  domain-env)
-    domain_env_of "${1:?package required}"
-    ;;
   upstream)
     resolve_upstream "${1:?package required}"
     ;;
   *)
-    echo "Usage: $0 list|pkgver|arches|pkgnames|dockerfiles|packagelist|srclist|make-targets|build|build-matrix|publish-matrix|check-matrix|changed|domain-env|upstream" >&2
+    echo "Usage: $0 list|pkgver|arches|pkgnames|dockerfiles|packagelist|srclist|make-targets|build|build-matrix|publish-matrix|check-matrix|changed|upstream" >&2
     exit 2
     ;;
 esac

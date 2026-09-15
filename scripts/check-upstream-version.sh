@@ -6,8 +6,8 @@
 # Optional: VERSION=<upstream> to skip the remote API
 #
 # Upstream resolution (scripts/discover.sh upstream):
-#   1. anitya.json  (package → Anitya project id)
-#   2. GitHub URL inferred from the pacscript (source=/url=)#
+#   1. anitya.cfg  (package=Anitya project id)
+#   2. GitHub URL inferred from the pacscript (source=/url=)
 # Exit codes:
 #   0 — packaged version is up to date
 #   1 — a newer stable version is available (prints version to stdout)

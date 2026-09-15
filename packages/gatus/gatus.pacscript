@@ -26,21 +26,14 @@ source=(
 )
 
 makedepends+=(
-  "ca-certificates" "curl" "git"
+  "ca-certificates" "curl" "git" "golang"
 )
 
-# Go: official toolchain in the Dockerfile (amd64/arm64/armv6l for armhf).
-# Same build line everywhere — CGO_ENABLED=0 (sqlite via modernc.org).
+# Go from Debian trixie-backports (shared docker/Dockerfile). CGO_ENABLED=0 (sqlite via modernc.org).
 
 build() {
-  set -e
-  export CGO_ENABLED=0
-  export PATH="/usr/local/go/bin:${PATH}"
-  export GOCACHE="${srcdir}/.gocache"
-  export GOMODCACHE="${srcdir}/.gomodcache"
-
   cd "${srcdir}/gatus-${pkgver}"
-  go build -trimpath -ldflags="-s -w" -o gatus .
+  CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o gatus .
 }
 
 _render_in() {

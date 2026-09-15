@@ -40,6 +40,10 @@ makedepends_trixie=(
   "python3.13" "python3.13-venv" "python3.13-dev"
 )
 
+makedepends_resolute=(
+  "python3" "python3-venv" "python3-dev"
+)
+
 makedepends+=(
   "build-essential" "pkg-config" "patch"
   "libpq-dev" "libxml2-dev" "zlib1g-dev" "libssl-dev" "libffi-dev"
@@ -48,6 +52,10 @@ makedepends+=(
 
 depends_trixie=(
   "python3.13"
+)
+
+depends_resolute=(
+  "python3"
 )
 
 depends+=(
@@ -77,6 +85,9 @@ _install_frontend_dist() {
 
 build() {
   set -e
+  if ! command -v "${_python}" >/dev/null 2>&1; then
+    _python="python3"
+  fi
   local staging="${srcdir}/staging"
   mkdir -p "${staging}${_install_prefix}/src"
   cp -a "${srcdir}/${_backend}/." "${staging}${_install_prefix}/src/"

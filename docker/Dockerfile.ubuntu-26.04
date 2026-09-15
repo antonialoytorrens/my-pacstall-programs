@@ -1,31 +1,19 @@
 # syntax=docker/dockerfile:1
+# Generated from Dockerfile.in — do not edit by hand (scripts/render-dockerfiles.sh).
 # Platform is set by CI/Makefile via --platform (pacstall cannot cross-build).
-FROM debian:trixie AS builder
+FROM ubuntu:26.04 AS builder
 
 ARG PACSTALL_VERSION=6.4.2
 ARG PACSTALL_REVISION=pacstall1
 ARG SPDX_LICENSES_VERSION=3.27.0
 ARG SPDX_LICENSES_REVISION=+ds-1
-ARG GO_VERSION=1.26.8
+ARG PACKAGE
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PATH="/usr/local/go/bin:${PATH}"
 
 RUN apt-get update -qq \
   && apt-get install -y -qq --no-install-recommends \
-    ca-certificates sudo curl git
-
-# Go: official toolchain (amd64/arm64/armv6l). Same steps on every arch —
-# Debian golang is too old for gatus (needs go1.26+).
-RUN ARCH="$(dpkg --print-architecture)" \
-  && case "${ARCH}" in \
-       amd64) GOARCH=amd64 ;; \
-       arm64) GOARCH=arm64 ;; \
-       armhf) GOARCH=armv6l ;; \
-       *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; \
-     esac \
-  && curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz" \
-    | tar -C /usr/local -xz \
-  && go version
+       ca-certificates sudo curl git \
+       golang rustc cargo
 
 ADD https://github.com/pacstall/pacstall/releases/download/${PACSTALL_VERSION}/pacstall_${PACSTALL_VERSION}-${PACSTALL_REVISION}_all.deb \
   /var/cache/apt/archives/pacstall_${PACSTALL_VERSION}-${PACSTALL_REVISION}_all.deb
@@ -40,12 +28,20 @@ WORKDIR /build
 COPY packagelist srclist /build/
 COPY packages/ /build/packages/
 
-# Helpers depend on gatus via apt; build main first, install it, then the splits.
+# Split packages: build pkgbase first, install it, then helpers. Else one -I.
 RUN set -e \
-  && pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus \
-  && apt-get install -y -qq --no-install-recommends ./gatus_*.deb \
-  && pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus-pgsql \
-  && pacstall -BPNs -I packages/gatus/gatus.pacscript:gatus-sqlite \
+  && ps="packages/${PACKAGE}/${PACKAGE}.pacscript" \
+  && if grep -qE '^pkgname=\(' "${ps}"; then \
+       pacstall -BPNs -I "${ps}:${PACKAGE}" \
+       && apt-get install -y -qq --no-install-recommends ./${PACKAGE}_*.deb \
+       && names="$(sed -nE 's/^pkgname=\((.*)\).*/\1/p' "${ps}" | head -n1 | tr -d "'\"")" \
+       && for n in ${names}; do \
+            [ "${n}" = "${PACKAGE}" ] && continue; \
+            pacstall -BPNs -I "${ps}:${n}"; \
+          done; \
+     else \
+       pacstall -BPNs -I "${ps}"; \
+     fi \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* /tmp/pacstall /var/cache/apt/archives/*
 

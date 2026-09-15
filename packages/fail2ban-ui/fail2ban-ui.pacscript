@@ -28,7 +28,7 @@ depends=(
 recommends=("fail2ban" "whois" "openssh-client")
 backup=('etc/fail2ban-ui/fail2ban-ui.env')
 
-# Go from Debian trixie-backports (see docker/fail2ban-ui/Dockerfile).
+# Go from Debian trixie-backports (shared docker/Dockerfile).
 # CGO_ENABLED=0 — sqlite via modernc.org.
 
 build() {

@@ -1,0 +1,20 @@
+RUN echo "deb http://deb.debian.org/debian trixie-backports main" \
+      > /etc/apt/sources.list.d/backports.list \
+  && printf '%s\n' \
+       'Package: golang*' \
+       'Pin: release n=trixie-backports' \
+       'Pin-Priority: 990' \
+       '' \
+       'Package: rustc' \
+       'Pin: release n=trixie-backports' \
+       'Pin-Priority: 990' \
+       '' \
+       'Package: cargo' \
+       'Pin: release n=trixie-backports' \
+       'Pin-Priority: 990' \
+       > /etc/apt/preferences.d/toolchain-backports \
+  && apt-get update -qq \
+  && apt-get install -y -qq --no-install-recommends \
+       ca-certificates sudo curl git \
+  && apt-get install -y -qq -t trixie-backports --no-install-recommends \
+       golang rustc cargo

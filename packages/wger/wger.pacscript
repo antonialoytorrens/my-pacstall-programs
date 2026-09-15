@@ -51,7 +51,7 @@ makedepends+=(
   "rustc" "cargo"
 )
 makedepends_debian=("libjpeg62-turbo-dev")
-makedepends_ubuntu=("libjpeg-turbo8-dev")
+makedepends_resolute=("libjpeg-turbo8-dev")
 
 prepare() {
   set -e
@@ -149,7 +149,7 @@ package_wger() {
     "wger-pgsql | wger-sqlite | dbconfig-no-thanks"
   )
   depends_debian=("libjpeg62-turbo")
-  depends_ubuntu=("libjpeg-turbo8")
+  depends_resolute=("libjpeg-turbo8")
   recommends=("valkey-server")
   backup=('etc/wger/wger.env')
   pkgdesc="wger Workout Manager (bundled venv, native systemd)"

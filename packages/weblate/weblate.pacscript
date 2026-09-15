@@ -32,6 +32,10 @@ makedepends_trixie=(
   "python3.13" "python3.13-venv" "python3.13-dev"
 )
 
+makedepends_resolute=(
+  "python3" "python3-venv" "python3-dev"
+)
+
 makedepends+=(
   "build-essential" "pkg-config" "cmake"
   "libpq-dev" "libxml2-dev" "libxslt1-dev" "libffi-dev"
@@ -47,6 +51,10 @@ makedepends+=(
 
 depends_trixie=(
   "python3.13"
+)
+
+depends_resolute=(
+  "python3"
 )
 
 depends+=(

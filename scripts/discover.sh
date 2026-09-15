@@ -313,19 +313,20 @@ build_matrix_json() {
       [ -n "${dockerfile}" ] || continue
       while IFS= read -r arch; do
         [ -n "${arch}" ] || continue
-        local target suffix
+        local target suffix relnum
         if [ "${multi}" = true ]; then
           target="${pkg}-${distro}-${release}-${arch}"
         else
           target="${pkg}-${arch}"
         fi
         suffix="$(deb_suffix_of "${distro}" "${release}")"
+        relnum="${suffix#"${distro}"}"
         if [ "${first}" = true ]; then
           first=false
         else
           printf ','
         fi
-        printf '{"package":%s,"distribution":%s,"release":%s,"dockerfile":%s,"arch":%s,"runner":%s,"qemu":%s,"target":%s,"multi_distro":%s,"timeout_minutes":180,"deb_suffix":%s}' \
+        printf '{"package":%s,"distribution":%s,"release":%s,"dockerfile":%s,"arch":%s,"runner":%s,"qemu":%s,"target":%s,"multi_distro":%s,"timeout_minutes":180,"deb_suffix":%s,"release_number":%s}' \
           "$(json_escape "${pkg}")" \
           "$(json_escape "${distro}")" \
           "$(json_escape "${release}")" \
@@ -335,7 +336,8 @@ build_matrix_json() {
           "$(qemu_of "${arch}")" \
           "$(json_escape "${target}")" \
           "${multi}" \
-          "$(json_escape "${suffix}")"
+          "$(json_escape "${suffix}")" \
+          "$(json_escape "${relnum}")"
       done < <(arches_of "${pkg}")
     done < <(dockerfiles_of)
   done

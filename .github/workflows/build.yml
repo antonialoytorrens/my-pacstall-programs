@@ -66,6 +66,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
   build:
+    name: Build ${{ matrix.package }} (${{ matrix.distribution }} ${{ matrix.release_number }}, ${{ matrix.arch }})
     needs: discover
     if: needs.discover.outputs.has_builds == 'true'
     strategy:
@@ -86,7 +87,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build ${{ matrix.package }} (${{ matrix.distribution }}/${{ matrix.release }} ${{ matrix.arch }})
+      - name: Build
         run: make "${{ matrix.target }}"
 
       - name: Tag artifacts with distribution/release

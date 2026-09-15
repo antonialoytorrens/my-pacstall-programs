@@ -51,15 +51,15 @@ makedepends+=(
 )
 
 depends_trixie=(
-  "python3.13"
+  "python3.13" "libxml2"
 )
 
 depends_resolute=(
-  "python3"
+  "python3" "libxml2-16"
 )
 
 depends+=(
-  "libpq5" "libxml2" "postgresql" "valkey-server"
+  "libpq5" "postgresql" "valkey-server"
   "dbconfig-pgsql" "postgresql" "debconf" "debconf-utils"
 )
 

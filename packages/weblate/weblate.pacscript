@@ -50,17 +50,17 @@ makedepends+=(
 )
 
 depends_trixie=(
-  "python3.13"
+  "python3.13" "libxml2" "libjpeg62-turbo"
 )
 
 depends_resolute=(
-  "python3"
+  "python3" "libxml2-16" "libjpeg-turbo8"
 )
 
 depends+=(
-  "libpq5" "libxml2" "libxslt1.1" "libcairo2"
+  "libpq5" "libxslt1.1" "libcairo2"
   "libgirepository-2.0-0" "gir1.2-pango-1.0" "gir1.2-rsvg-2.0"
-  "libacl1" "liblz4-1" "libzstd1" "libjpeg62-turbo" "zlib1g"
+  "libacl1" "liblz4-1" "libzstd1" "zlib1g"
   "libtesseract5" "tesseract-ocr"
   "postgresql" "valkey-server" "openssh-client" "git"
   "dbconfig-pgsql" "debconf" "debconf-utils"

@@ -346,20 +346,46 @@ build_matrix_json() {
 
 publish_matrix_json() {
   local selected=("$@")
-  local pkg first=true
+  local pkg dockerfile distro release arch first=true multi suffix glob
+  local globs first_glob
   if [ "${#selected[@]}" -eq 0 ]; then
     mapfile -t selected < <(list_packages)
+  fi
+  multi=false
+  if [ "$(dockerfile_count)" -gt 1 ]; then
+    multi=true
   fi
   printf '['
   for pkg in "${selected[@]}"; do
     [ -n "${pkg}" ] || continue
     is_package "${pkg}" || continue
+    globs="["
+    first_glob=true
+    while IFS='|' read -r dockerfile distro release; do
+      [ -n "${dockerfile}" ] || continue
+      while IFS= read -r arch; do
+        [ -n "${arch}" ] || continue
+        suffix="$(deb_suffix_of "${distro}" "${release}")"
+        if [ "${multi}" = true ]; then
+          glob="${pkg}_*~${suffix}_${arch}.deb"
+        else
+          glob="${pkg}_*_${arch}.deb"
+        fi
+        if [ "${first_glob}" = true ]; then
+          first_glob=false
+        else
+          globs+=","
+        fi
+        globs+="$(json_escape "${glob}")"
+      done < <(arches_of "${pkg}")
+    done < <(dockerfiles_of)
+    globs+="]"
     if [ "${first}" = true ]; then
       first=false
     else
       printf ','
     fi
-    printf '{"package":%s}' "$(json_escape "${pkg}")"
+    printf '{"package":%s,"expected_globs":%s}' "$(json_escape "${pkg}")" "${globs}"
   done
   printf ']\n'
 }

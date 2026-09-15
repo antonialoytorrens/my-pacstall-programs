@@ -150,8 +150,9 @@ jobs:
           if-no-files-found: ignore
 
   publish:
+    name: Publish ${{ matrix.package }}
     needs: [discover, build]
-    if: needs.discover.outputs.has_builds == 'true' && needs.build.result == 'success'
+    if: always() && !cancelled() && needs.discover.outputs.has_builds == 'true' && needs.build.result != 'cancelled'
     strategy:
       fail-fast: false
       matrix:
@@ -164,8 +165,33 @@ jobs:
         with:
           pattern: ${{ matrix.package }}-deb-*
           merge-multiple: true
+          if-no-files-found: ignore
+
+      - name: Check all distro/arch artifacts
+        id: gate
+        env:
+          EXPECTED_GLOBS: ${{ toJSON(matrix.expected_globs) }}
+        run: |
+          python3 - <<'PY'
+          import glob
+          import json
+          import os
+
+          expected = json.loads(os.environ["EXPECTED_GLOBS"])
+          missing = [p for p in expected if not glob.glob(p)]
+          out = os.environ["GITHUB_OUTPUT"]
+          if missing:
+              for p in missing:
+                  print(f"::warning::Missing artifact matching {p}")
+              with open(out, "a", encoding="utf-8") as f:
+                  f.write("complete=false\n")
+          else:
+              with open(out, "a", encoding="utf-8") as f:
+                  f.write("complete=true\n")
+          PY
 
       - name: Publish ${{ matrix.package }} prerelease
+        if: steps.gate.outputs.complete == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}

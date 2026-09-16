@@ -260,7 +260,8 @@ _wger_bootstrap() {
 _wger_restart() {
   _have_systemd || return 0
   systemctl daemon-reload
-  systemctl try-restart wger.service
+  # Start after DB bootstrap (wger only enables the unit; does not --now).
+  systemctl enable --now wger.service
 }
 
 ensure_pg_role_db() {
@@ -283,7 +284,6 @@ post_install() {
   [ $# -eq 0 ] && set -- configure
 
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
-  local src="/opt/wger/src"
   local venv="/opt/wger/venv"
   local env_file="/etc/wger/wger.env"
 
@@ -299,18 +299,21 @@ post_install() {
 
       if grep -q '__JWTPRIVATE_PLACEHOLDER__' "$env_file"; then
         local jwt_output jwt_private jwt_public
-        # Dummy sqlite: django-admin loads settings before wger-pgsql/sqlite (CI apt-get install).
-        jwt_output=$(
-          set -a
-          # shellcheck disable=SC1091
-          . "${env_file}"
-          set +a
-          export DJANGO_DB_ENGINE=django.db.backends.sqlite3
-          export DJANGO_DB_DATABASE=:memory:
-          export DJANGO_SETTINGS_MODULE=settings.main
-          export PYTHONPATH="${src}"
-          "${venv}/bin/django-admin" generate-jwt-keys
-        )
+        # Generate JWKs without django-admin: settings.main decodes JWT_* at
+        # import, so placeholders cannot be sourced into a management command.
+        jwt_output=$("$venv/bin/python" -c '
+from base64 import urlsafe_b64encode
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
+
+priv = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+def b64jwk(key):
+    return urlsafe_b64encode(RSAAlgorithm.to_jwk(key).encode()).decode()
+
+print("JWT_PRIVATE_KEY=" + b64jwk(priv))
+print("JWT_PUBLIC_KEY=" + b64jwk(priv.public_key()))
+')
         jwt_private=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PRIVATE_KEY=' | cut -d= -f2-)
         jwt_public=$(printf '%s\n' "${jwt_output}" | grep '^JWT_PUBLIC_KEY=' | cut -d= -f2-)
         sed -i "s|__JWTPRIVATE_PLACEHOLDER__|${jwt_private}|" "$env_file"
@@ -323,7 +326,8 @@ post_install() {
       if _have_systemd; then
         systemd-tmpfiles --create /usr/lib/tmpfiles.d/wger.conf
         systemctl daemon-reload
-        systemctl enable --now wger
+        # DB helpers start the service after bootstrap.
+        systemctl enable wger
       fi
       ;;
 

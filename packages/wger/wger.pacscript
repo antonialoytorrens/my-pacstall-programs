@@ -1,7 +1,7 @@
 pkgbase="wger"
 pkgname=("wger" "wger-pgsql" "wger-sqlite")
 pkgver="2.7"
-pkgrel="1"
+pkgrel="2"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')
@@ -260,8 +260,8 @@ _wger_bootstrap() {
 _wger_restart() {
   _have_systemd || return 0
   systemctl daemon-reload
-  # Start after DB bootstrap (wger only enables the unit; does not --now).
-  systemctl enable --now wger.service
+  # Enable only — never start in postinst (installers/CI may lack a full runtime).
+  systemctl enable wger.service
 }
 
 ensure_pg_role_db() {

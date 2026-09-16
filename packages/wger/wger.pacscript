@@ -253,7 +253,7 @@ _wger_bootstrap() {
   _wger_run_as "${venv}/bin/django-admin" collectstatic --noinput
   _wger_run_as "${venv}/bin/django-admin" set-site-url
   fancy_message warn "Default admin (first install only): admin / adminadmin — CHANGE THIS PASSWORD immediately."
-  chmod 750 /var/lib/wger
+  chmod 755 /var/lib/wger
   chmod -R g+rX /var/lib/wger/static
 }
 

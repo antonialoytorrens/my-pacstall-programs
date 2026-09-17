@@ -193,7 +193,6 @@ jobs:
           with: |
             pattern: ${{ matrix.package }}-deb-*
             merge-multiple: true
-            if-no-files-found: ignore
 
       - name: Check all distro/arch artifacts
         id: gate

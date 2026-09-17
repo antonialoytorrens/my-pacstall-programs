@@ -1,0 +1,23 @@
+[Unit]
+Description=Seafile background events daemon (activity feed, statistics)
+After=network.target seafile-server.service seahub.service mariadb.service mysql.service
+Requires=seafile-server.service
+
+[Service]
+Type=simple
+User=seafile
+Group=seafile
+WorkingDirectory=/opt/seafile/seafile-server-latest/seafevents
+Environment=CCNET_CONF_DIR=/opt/seafile/conf
+Environment=SEAFILE_CONF_DIR=/opt/seafile/seafile-data
+Environment=SEAHUB_DIR=/opt/seafile/seafile-server-latest/seahub
+Environment=SEAFES_DIR=/opt/seafile/seafile-server-latest/seafevents
+Environment=PYTHONPATH=/opt/seafile/seafile-server-latest/seafevents:/opt/seafile/seafile-server-latest/seahub
+EnvironmentFile=/opt/seafile/conf/.env
+ExecStart=/opt/seafile/seafile-server-latest/seafevents/venv/bin/python3 \
+    /opt/seafile/seafile-server-latest/seafevents/main.py \
+    --logfile=/opt/seafile/logs/seafevents.log --loglevel=info
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

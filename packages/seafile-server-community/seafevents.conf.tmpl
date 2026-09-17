@@ -1,0 +1,16 @@
+# /opt/seafile/conf/seafevents.conf - written once by postinst,
+# reusing the same dbconfig-common MySQL database as the rest of the stack.
+
+[DATABASE]
+type = mysql
+host = _DBC_DBSERVER_
+port = _DBC_DBPORT_
+username = _DBC_DBUSER_
+password = _DBC_DBPASS_
+name = _DBC_DBNAME_
+
+[EVENTS]
+enabled = true
+
+[STATISTICS]
+enabled = true

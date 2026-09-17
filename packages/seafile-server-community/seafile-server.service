@@ -1,0 +1,22 @@
+[Unit]
+Description=Seafile file sync server (seaf-server + fileserver, via seafile-controller)
+After=network.target mariadb.service mysql.service
+Wants=mariadb.service mysql.service
+
+[Service]
+Type=simple
+User=seafile
+Group=seafile
+WorkingDirectory=/opt/seafile
+EnvironmentFile=/opt/seafile/conf/.env
+ExecStart=/opt/seafile/seafile-server-latest/seafile/bin/seafile-controller \
+    -f \
+    -c /opt/seafile/conf \
+    -F /opt/seafile/conf \
+    -d /opt/seafile/seafile-data \
+    -L /opt/seafile/logs
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

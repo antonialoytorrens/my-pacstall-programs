@@ -1,0 +1,18 @@
+[Unit]
+Description=Seafile real-time notification server
+After=network.target seafile-server.service
+Requires=seafile-server.service
+
+[Service]
+Type=simple
+User=seafile
+Group=seafile
+WorkingDirectory=/opt/seafile
+EnvironmentFile=/opt/seafile/conf/.env
+ExecStart=/opt/seafile/seafile-server-latest/seafile/bin/notification-server \
+    -c /opt/seafile/conf \
+    -l /opt/seafile/logs/notification-server.log
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

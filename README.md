@@ -38,11 +38,13 @@ Optional: add `name=<anitya_id>` to [`anitya.cfg`](anitya.cfg) when upstream is 
 
 ## CI / GitHub Releases
 
-Push to `master` builds changed packages and publishes a **prerelease** per package. Tags look like `gatus-5.36.0-20260906120000`.
+Push to `master` (and `workflow_dispatch`) builds a package only when there is no published prerelease with all expected `.deb`s for the current `pkgver` + `pkgrel`. To rebuild, bump `pkgver` (up or down) or increase `pkgrel`. Tags look like `gatus-5.36.0-20260906120000`.
 
-Assets are tagged with distro version (not codename), e.g. `wger_2.7~debian13_amd64.deb`, `gatus_5.36.0~ubuntu26.04_amd64.deb`.
+Releases are created as drafts, assets are uploaded and checked (name + size), then the prerelease is published.
 
-A daily workflow keeps the **3** newest prereleases **per package** (stable releases are never touched).
+Assets are tagged with distro version (not codename), e.g. `wger_2.7-pacstall2~debian13_amd64.deb`, `gatus_5.36.0-pacstall4~ubuntu26.04_amd64.deb`.
+
+A daily workflow keeps the **3** newest prereleases **per package** (stable releases are never touched) and deletes leftover draft releases.
 
 ## reprepro
 
@@ -61,4 +63,4 @@ scripts/discover.sh  # package discovery / matrices / pkgver
 Makefile             # generic targets from discover.sh
 ```
 
-Bump `pkgver` in the pacscript when updating.
+Bump `pkgver` or increase `pkgrel` in the pacscript to trigger a new CI build.

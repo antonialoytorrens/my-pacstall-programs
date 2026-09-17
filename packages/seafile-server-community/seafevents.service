@@ -14,7 +14,7 @@ Environment=SEAHUB_DIR=/opt/seafile/seafile-server-latest/seahub
 Environment=SEAFES_DIR=/opt/seafile/seafile-server-latest/seafevents
 Environment=PYTHONPATH=/opt/seafile/seafile-server-latest/seafevents:/opt/seafile/seafile-server-latest/seahub
 EnvironmentFile=/opt/seafile/conf/.env
-ExecStart=/opt/seafile/seafile-server-latest/seafevents/venv/bin/python3 \
+ExecStart=/opt/seafile/python-venv/bin/python3 \
     /opt/seafile/seafile-server-latest/seafevents/main.py \
     --logfile=/opt/seafile/logs/seafevents.log --loglevel=info
 Restart=on-failure

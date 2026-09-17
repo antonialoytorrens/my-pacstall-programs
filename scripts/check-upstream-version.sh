@@ -19,6 +19,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DISCOVER="${REPO_ROOT}/scripts/discover.sh"
+RETRY="${REPO_ROOT}/scripts/retry-5xx.sh"
 CACHE_DIR="${REPO_ROOT}/.cache"
 USER_AGENT="${USER_AGENT:-my-pacstall-programs/1.0 (+https://github.com/antonialoytorrens/my-pacstall-programs)}"
 
@@ -28,7 +29,7 @@ fetch_github() {
   local github_repo="$1"
   local api_url="https://api.github.com/repos/${github_repo}/releases/latest"
   local response
-  response="$(curl -fsS -A "${USER_AGENT}" \
+  response="$("${RETRY}" curl -fsS -A "${USER_AGENT}" \
     -H "Accept: application/vnd.github+json" \
     "${api_url}")" || {
     echo "Failed to query GitHub API: ${api_url}" >&2
@@ -49,7 +50,7 @@ fetch_anitya() {
   local project_id="$1"
   local api_url="https://release-monitoring.org/api/v2/versions/?project_id=${project_id}"
   local response parsed
-  response="$(curl -fsS -A "${USER_AGENT}" "${api_url}")" || {
+  response="$("${RETRY}" curl -fsS -A "${USER_AGENT}" "${api_url}")" || {
     echo "Failed to query Anitya API: ${api_url}" >&2
     exit 2
   }

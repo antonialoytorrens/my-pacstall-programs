@@ -1,6 +1,6 @@
 pkgname="seafile-server-community"
 pkgver="13.0.25"
-pkgrel="1"
+pkgrel="2"
 arch=('amd64' 'arm64')
 url="https://github.com/haiwen/seafile-server"
 license=('AGPL-3.0-or-later')
@@ -22,8 +22,6 @@ source=(
   "seafevents-${pkgver}-server.tar.gz::https://github.com/haiwen/seafevents/archive/refs/tags/v${pkgver}-server.tar.gz"
   "0001-fix-objcache-new-signature.patch"
   "0002-fix-evhtp-hook-callback-pointer-types.patch"
-  "seahub-requirements.txt"
-  "seafevents-requirements.txt"
   "ccnet.conf.dbconfig.tmpl"
   "seafile.conf.dbconfig.tmpl"
   "seahub_settings.py.dbconfig.tmpl"
@@ -92,19 +90,23 @@ prepare() {
   patch -p1 --forward -i "${srcdir}/0002-fix-evhtp-hook-callback-pointer-types.patch"
 }
 
-_venv_relocate() {
-  local venv="$1" from="$2" to="$3"
-  sed -i "s|${from}|${to}|g" "${venv}/pyvenv.cfg"
-  find "${venv}/bin" -maxdepth 1 -type f -exec sed -i "s|${from}|${to}|g" {} +
-}
-
 _venv_cleanup() {
   local venv="$1"
-  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources}
+  local site_pkgs
+  rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel,pkg_resources,_distutils_hack}
   rm -rf "${venv}/lib"/python*/site-packages/{pip,setuptools,wheel}-*.dist-info
+  rm -f "${venv}/lib"/python*/site-packages/distutils-precedence.pth
+  rm -f "${venv}/bin"/pip "${venv}/bin"/pip3 "${venv}/bin"/pip3.* \
+        "${venv}/bin"/wheel "${venv}/bin"/easy_install*
+  rm -rf "${venv}/include"
   find "${venv}" -depth -type d -name __pycache__ -exec rm -rf {} +
   find "${venv}" -name "*.pyc" -delete
   find "${venv}" -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+
+  site_pkgs="$(echo "${venv}/lib"/python*/site-packages)"
+  find "${site_pkgs}" -depth -maxdepth 3 -type d \( -name tests -o -name test \) \
+    -not -path "*/django/*" \
+    -exec rm -rf {} +
 }
 
 _copy_seaserv_into_venv() {
@@ -161,15 +163,20 @@ build() {
     cp -a "${server_tmp}/usr/lib/python3/dist-packages/." "${py_tmp}/"
   fi
 
+  # Shared python venv for seahub and seafevents: https://manual.seafile.com/13.0/setup_binary/installation/
+  local venv="${staging}${_install_root}/python-venv"
+  python3 -m venv --system-site-packages "${venv}"
+  "${venv}/bin/pip" install -q --no-cache-dir --upgrade pip setuptools wheel
+  "${venv}/bin/pip" install -q --no-cache-dir --no-binary mysqlclient,python-ldap \
+    -r "${srcdir}/${_seahub_src}/requirements.txt" \
+    -r "${srcdir}/${_events_src}/requirements.txt"
+  # django-redis: seahub CACHES need it, upstream req miss it
+  "${venv}/bin/pip" install -q --no-cache-dir django-redis
+
   # --- seahub ---
   local seahub_src="${srcdir}/${_seahub_src}"
   local seahub_dest="${staging}${_install_path}/seahub"
-  local seahub_venv_build="${srcdir}/seahub-venv-build"
   mkdir -p "${seahub_dest}"
-  python3 -m venv --system-site-packages "${seahub_venv_build}"
-  "${seahub_venv_build}/bin/pip" install -q --no-cache-dir --upgrade pip setuptools wheel
-  "${seahub_venv_build}/bin/pip" install -q --no-cache-dir --no-binary mysqlclient,python-ldap \
-    -r "${srcdir}/seahub-requirements.txt"
 
   (
     cd "${seahub_src}/frontend"
@@ -178,38 +185,29 @@ build() {
   )
   (
     cd "${seahub_src}"
-    "${seahub_venv_build}/bin/django-admin" compilemessages --settings=seahub.settings || true
-    PYTHONPATH="${seahub_src}" "${seahub_venv_build}/bin/python3" manage.py compilejsi18n \
+    "${venv}/bin/django-admin" compilemessages --settings=seahub.settings || true
+    PYTHONPATH="${seahub_src}" "${venv}/bin/python3" manage.py compilejsi18n \
       --settings=seahub.settings || true
   )
 
   rm -rf "${seahub_src}/frontend/node_modules"
   cp -a "${seahub_src}/." "${seahub_dest}/"
-  cp -a "${seahub_venv_build}" "${seahub_dest}/venv"
-  _venv_relocate "${seahub_dest}/venv" "${seahub_venv_build}" "${_install_path}/seahub/venv"
-  _copy_seaserv_into_venv "${seahub_dest}/venv" "${py_tmp}"
-  _venv_cleanup "${seahub_dest}/venv"
   find "${seahub_dest}" -depth -type d -name __pycache__ -exec rm -rf {} +
   find "${seahub_dest}" -name "*.pyc" -delete
 
   # --- seafevents ---
   local events_src="${srcdir}/${_events_src}"
   local events_dest="${staging}${_install_path}/seafevents"
-  local events_venv_build="${srcdir}/seafevents-venv-build"
   mkdir -p "${events_dest}"
-  python3 -m venv --system-site-packages "${events_venv_build}"
-  "${events_venv_build}/bin/pip" install -q --no-cache-dir --upgrade pip setuptools wheel
-  "${events_venv_build}/bin/pip" install -q --no-cache-dir \
-    -r "${srcdir}/seafevents-requirements.txt"
-
   find "${events_src}" -maxdepth 1 -mindepth 1 \
     -exec cp -a {} "${events_dest}/" \;
-  cp -a "${events_venv_build}" "${events_dest}/venv"
-  _venv_relocate "${events_dest}/venv" "${events_venv_build}" "${_install_path}/seafevents/venv"
-  _copy_seaserv_into_venv "${events_dest}/venv" "${py_tmp}"
-  _venv_cleanup "${events_dest}/venv"
   find "${events_dest}" -depth -type d -name __pycache__ -exec rm -rf {} +
   find "${events_dest}" -name "*.pyc" -delete
+
+  sed -i "s|${staging}||g" "${venv}/pyvenv.cfg"
+  find "${venv}/bin" -maxdepth 1 -type f -exec sed -i "s|${staging}||g" {} +
+  _copy_seaserv_into_venv "${venv}" "${py_tmp}"
+  _venv_cleanup "${venv}"
 }
 
 _render_in() {
@@ -400,7 +398,7 @@ post_install() {
       PYTHONPATH="$PYTHONPATH" \
       DJANGO_SETTINGS_MODULE="$DJANGO_SETTINGS_MODULE" \
       SECRET_KEY="${SECRET_KEY:-}" \
-      "${latest}/seahub/venv/bin/python3" \
+      /opt/seafile/python-venv/bin/python3 \
       "${latest}/seahub/manage.py" migrate --no-input
     runuser -u seafile -- env \
       SEAFILE_CENTRAL_CONF_DIR="$SEAFILE_CENTRAL_CONF_DIR" \
@@ -409,7 +407,7 @@ post_install() {
       PYTHONPATH="$PYTHONPATH" \
       DJANGO_SETTINGS_MODULE="$DJANGO_SETTINGS_MODULE" \
       SECRET_KEY="${SECRET_KEY:-}" \
-      "${latest}/seahub/venv/bin/python3" \
+      /opt/seafile/python-venv/bin/python3 \
       "${latest}/seahub/manage.py" collectstatic --no-input
   fi
 

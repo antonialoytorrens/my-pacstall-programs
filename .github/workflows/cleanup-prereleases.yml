@@ -27,5 +27,5 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           KEEP_COUNT: ${{ inputs.keep_count || '3' }}
         run: |
-          chmod +x ./scripts/cleanup-old-prereleases.sh
+          chmod +x ./scripts/cleanup-old-prereleases.sh ./scripts/retry-5xx.sh ./scripts/discover.sh
           ./scripts/cleanup-old-prereleases.sh

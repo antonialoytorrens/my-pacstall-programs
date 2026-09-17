@@ -32,8 +32,11 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           INPUT_PACKAGE: ${{ inputs.package }}
           BEFORE_SHA: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          chmod +x scripts/discover.sh
+          chmod +x scripts/discover.sh scripts/retry-5xx.sh
           if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             if [ "${INPUT_PACKAGE}" = "all" ] || [ -z "${INPUT_PACKAGE}" ]; then
               mapfile -t PKGS < <(./scripts/discover.sh list)
@@ -46,6 +49,16 @@ jobs:
 
           if [ "${#PKGS[@]}" -eq 0 ]; then
             echo "No packages to build"
+            echo "has_builds=false" >> "${GITHUB_OUTPUT}"
+            echo "build_matrix=[]" >> "${GITHUB_OUTPUT}"
+            echo "publish_matrix=[]" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          echo "Candidates: ${PKGS[*]}"
+          mapfile -t PKGS < <(./scripts/discover.sh unpublished "${PKGS[@]}")
+          if [ "${#PKGS[@]}" -eq 0 ]; then
+            echo "All candidate packages already published for current pkgver+pkgrel"
             echo "has_builds=false" >> "${GITHUB_OUTPUT}"
             echo "build_matrix=[]" >> "${GITHUB_OUTPUT}"
             echo "publish_matrix=[]" >> "${GITHUB_OUTPUT}"
@@ -133,21 +146,31 @@ jobs:
             ls -lh "$h"
           done
 
-      - uses: actions/upload-artifact@v7
+      - uses: Wandalen/wretry.action@v3.8.0
         with:
-          name: ${{ matrix.package }}-deb-${{ matrix.deb_suffix }}-${{ matrix.arch }}
-          path: |
-            ${{ matrix.package }}_*_${{ matrix.arch }}.deb
-            ${{ matrix.package }}_*~${{ matrix.deb_suffix }}_${{ matrix.arch }}.deb
+          action: actions/upload-artifact@v7
+          attempt_limit: 21
+          attempt_delay: 0
+          pre_retry_command: bash scripts/retry-5xx.sh sleep
+          with: |
+            name: ${{ matrix.package }}-deb-${{ matrix.deb_suffix }}-${{ matrix.arch }}
+            path: |
+              ${{ matrix.package }}_*_${{ matrix.arch }}.deb
+              ${{ matrix.package }}_*~${{ matrix.deb_suffix }}_${{ matrix.arch }}.deb
 
-      - uses: actions/upload-artifact@v7
+      - uses: Wandalen/wretry.action@v3.8.0
         if: matrix.arch == 'amd64'
         with:
-          name: ${{ matrix.package }}-deb-${{ matrix.deb_suffix }}-all
-          path: |
-            ${{ matrix.package }}-*_*_all.deb
-            ${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_all.deb
-          if-no-files-found: ignore
+          action: actions/upload-artifact@v7
+          attempt_limit: 21
+          attempt_delay: 0
+          pre_retry_command: bash scripts/retry-5xx.sh sleep
+          with: |
+            name: ${{ matrix.package }}-deb-${{ matrix.deb_suffix }}-all
+            path: |
+              ${{ matrix.package }}-*_*_all.deb
+              ${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_all.deb
+            if-no-files-found: ignore
 
   publish:
     name: Publish ${{ matrix.package }}
@@ -161,11 +184,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v8
+      - uses: Wandalen/wretry.action@v3.8.0
         with:
-          pattern: ${{ matrix.package }}-deb-*
-          merge-multiple: true
-          if-no-files-found: ignore
+          action: actions/download-artifact@v8
+          attempt_limit: 21
+          attempt_delay: 0
+          pre_retry_command: bash scripts/retry-5xx.sh sleep
+          with: |
+            pattern: ${{ matrix.package }}-deb-*
+            merge-multiple: true
+            if-no-files-found: ignore
 
       - name: Check all distro/arch artifacts
         id: gate

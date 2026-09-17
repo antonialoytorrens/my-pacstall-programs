@@ -67,7 +67,7 @@ jobs:
           PACKAGE: ${{ matrix.package }}
           VERSION: ${{ inputs.upstream_version }}
         run: |
-          chmod +x ./scripts/check-upstream-version.sh ./scripts/discover.sh
+          chmod +x ./scripts/check-upstream-version.sh ./scripts/discover.sh ./scripts/retry-5xx.sh
           set +e
           NEW_VERSION="$(./scripts/check-upstream-version.sh)"
           STATUS=$?
@@ -85,15 +85,15 @@ jobs:
           NEW_VERSION: ${{ steps.check.outputs.new_version }}
         run: |
           TITLE="${{ matrix.title_prefix }} ${NEW_VERSION} available"
-          EXISTING="$(gh issue list --state open --label new-version --search "${TITLE}" --json number --jq 'length')"
+          EXISTING="$(bash scripts/retry-5xx.sh gh issue list --state open --label new-version --search "${TITLE}" --json number --jq 'length')"
           if [ "${EXISTING}" != "0" ]; then
             echo "Issue already open for ${NEW_VERSION}, skipping."
             exit 0
           fi
 
           PACKAGED="$(./scripts/discover.sh pkgver "${{ matrix.package }}")"
-          gh label create new-version --description "Upstream version newer than packaged" --force 2>/dev/null || true
-          gh issue create \
+          bash scripts/retry-5xx.sh gh label create new-version --description "Upstream version newer than packaged" --force 2>/dev/null || true
+          bash scripts/retry-5xx.sh gh issue create \
             --title "${TITLE}" \
             --label new-version \
             --body "${{ matrix.title_prefix }} ${NEW_VERSION} is available (packaged: ${PACKAGED}). Update \`pkgver\` in \`packages/${{ matrix.package }}/${{ matrix.package }}.pacscript\`."

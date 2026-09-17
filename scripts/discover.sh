@@ -9,6 +9,7 @@
 # Usage:
 #   discover.sh list
 #   discover.sh pkgver <pkg>
+#   discover.sh pkgrel <pkg>
 #   discover.sh arches <pkg>
 #   discover.sh pkgnames <pkg>
 #   discover.sh dockerfiles
@@ -20,6 +21,7 @@
 #   discover.sh publish-matrix [pkg...]
 #   discover.sh check-matrix
 #   discover.sh changed [base_sha]
+#   discover.sh unpublished [pkg...]
 #   discover.sh upstream <pkg>
 set -euo pipefail
 
@@ -60,6 +62,139 @@ pkgver_of() {
     return 1
   fi
   printf '%s\n' "${ver}"
+}
+
+pkgrel_of() {
+  local pkg="$1"
+  local ps rel
+  ps="$(pacscript_path "${pkg}")"
+  if [ ! -f "${ps}" ]; then
+    echo "pacscript not found: ${ps}" >&2
+    return 1
+  fi
+  rel="$(sed -n 's/^pkgrel="\([^"]*\)".*/\1/p' "${ps}" | head -n1)"
+  printf '%s\n' "${rel:-1}"
+}
+
+expected_versioned_debs() {
+  local pkg="$1"
+  local ver rel multi suffix arch dockerfile distro release
+  ver="$(pkgver_of "${pkg}")"
+  rel="$(pkgrel_of "${pkg}")"
+  multi=false
+  if [ "$(dockerfile_count)" -gt 1 ]; then
+    multi=true
+  fi
+  while IFS='|' read -r dockerfile distro release; do
+    [ -n "${dockerfile}" ] || continue
+    suffix="$(deb_suffix_of "${distro}" "${release}")"
+    while IFS= read -r arch; do
+      [ -n "${arch}" ] || continue
+      if [ "${multi}" = true ]; then
+        printf '%s\n' "${pkg}_${ver}-pacstall${rel}~${suffix}_${arch}.deb"
+      else
+        printf '%s\n' "${pkg}_${ver}-pacstall${rel}_${arch}.deb"
+      fi
+    done < <(arches_of "${pkg}")
+  done < <(dockerfiles_of)
+}
+
+unpublished_packages() {
+  local selected=("$@")
+  local pkg first json_pkgs json_expected line nfirst
+  local releases status
+
+  if [ "${#selected[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  json_pkgs='['
+  json_expected='{'
+  first=true
+  for pkg in "${selected[@]}"; do
+    [ -n "${pkg}" ] || continue
+    is_package "${pkg}" || continue
+    if [ "${first}" = true ]; then
+      first=false
+    else
+      json_pkgs+=','
+      json_expected+=','
+    fi
+    json_pkgs+="$(json_escape "${pkg}")"
+    json_expected+="$(json_escape "${pkg}")"
+    json_expected+=':['
+    nfirst=true
+    while IFS= read -r line; do
+      [ -n "${line}" ] || continue
+      if [ "${nfirst}" = true ]; then
+        nfirst=false
+      else
+        json_expected+=','
+      fi
+      json_expected+="$(json_escape "${line}")"
+    done < <(expected_versioned_debs "${pkg}")
+    json_expected+=']'
+  done
+  json_pkgs+=']'
+  json_expected+='}'
+
+  if [ -z "${GITHUB_REPOSITORY:-}" ] || { [ -z "${GITHUB_TOKEN:-}" ] && [ -z "${GH_TOKEN:-}" ]; }; then
+    echo "unpublished: no GitHub credentials; not skipping" >&2
+    printf '%s\n' "${selected[@]}"
+    return 0
+  fi
+
+  status=0
+  releases="$("${ROOT}/scripts/retry-5xx.sh" gh api --paginate "repos/${GITHUB_REPOSITORY}/releases")" || status=$?
+  if [ "${status}" -ne 0 ]; then
+    echo "unpublished: failed to list releases; not skipping" >&2
+    printf '%s\n' "${selected[@]}"
+    return 0
+  fi
+
+  status=0
+  EXPECTED_JSON="${json_expected}" SELECTED_JSON="${json_pkgs}" python3 -c '
+import json, os, sys
+
+raw = sys.stdin.read()
+decoder = json.JSONDecoder()
+idx = 0
+releases = []
+while idx < len(raw):
+    while idx < len(raw) and raw[idx].isspace():
+        idx += 1
+    if idx >= len(raw):
+        break
+    obj, end = decoder.raw_decode(raw, idx)
+    idx = end
+    if isinstance(obj, list):
+        releases.extend(obj)
+    else:
+        releases.append(obj)
+
+expected = json.loads(os.environ["EXPECTED_JSON"])
+order = json.loads(os.environ["SELECTED_JSON"])
+published = set()
+for rel in releases:
+    if rel.get("draft") or not rel.get("prerelease"):
+        continue
+    names = {a.get("name") or "" for a in (rel.get("assets") or [])}
+    for pkg, need in expected.items():
+        if pkg in published or not need:
+            continue
+        if all(n in names for n in need):
+            published.add(pkg)
+            print(f"skip {pkg}: already published for current pkgver+pkgrel", file=sys.stderr)
+
+for pkg in order:
+    if pkg not in published:
+        print(pkg)
+' <<<"${releases}" || status=$?
+  if [ "${status}" -ne 0 ]; then
+    echo "unpublished: failed to parse releases; not skipping" >&2
+    printf '%s\n' "${selected[@]}"
+    return 0
+  fi
 }
 
 arches_of() {
@@ -326,7 +461,7 @@ build_matrix_json() {
         else
           printf ','
         fi
-        printf '{"package":%s,"distribution":%s,"release":%s,"dockerfile":%s,"arch":%s,"runner":%s,"qemu":%s,"target":%s,"multi_distro":%s,"timeout_minutes":180,"deb_suffix":%s,"release_number":%s}' \
+        printf '{"package":%s,"distribution":%s,"release":%s,"dockerfile":%s,"arch":%s,"runner":%s,"qemu":%s,"target":%s,"multi_distro":%s,"timeout_minutes":360,"deb_suffix":%s,"release_number":%s}' \
           "$(json_escape "${pkg}")" \
           "$(json_escape "${distro}")" \
           "$(json_escape "${release}")" \
@@ -484,6 +619,12 @@ case "${cmd}" in
   pkgver)
     pkgver_of "${1:?package required}"
     ;;
+  pkgrel)
+    pkgrel_of "${1:?package required}"
+    ;;
+  unpublished)
+    unpublished_packages "$@"
+    ;;
   arches)
     arches_of "${1:?package required}"
     ;;
@@ -521,7 +662,7 @@ case "${cmd}" in
     resolve_upstream "${1:?package required}"
     ;;
   *)
-    echo "Usage: $0 list|pkgver|arches|pkgnames|dockerfiles|packagelist|srclist|make-targets|build|build-matrix|publish-matrix|check-matrix|changed|upstream" >&2
+    echo "Usage: $0 list|pkgver|pkgrel|arches|pkgnames|dockerfiles|packagelist|srclist|make-targets|build|build-matrix|publish-matrix|check-matrix|changed|unpublished|upstream" >&2
     exit 2
     ;;
 esac

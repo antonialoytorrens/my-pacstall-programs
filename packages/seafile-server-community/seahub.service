@@ -15,7 +15,7 @@ Environment=SEAFILE_CENTRAL_CONF_DIR=/opt/seafile/conf
 Environment=SEAFILE_CONF_DIR=/opt/seafile/seafile-data
 Environment=CCNET_CONF_DIR=/opt/seafile/conf
 EnvironmentFile=/opt/seafile/conf/.env
-ExecStart=/opt/seafile/seafile-server-latest/seahub/venv/bin/gunicorn seahub.wsgi:application \
+ExecStart=/opt/seafile/python-venv/bin/gunicorn seahub.wsgi:application \
     --preload --bind 127.0.0.1:49081 --workers 5 --timeout 300
 Restart=on-failure
 

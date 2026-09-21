@@ -1,0 +1,26 @@
+[Unit]
+Description=wger PowerSync service
+After=network.target postgresql.service wger.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=wger
+Group=wger
+EnvironmentFile=/etc/wger/wger.env
+Environment=PATH=/opt/wger/powersync/node/bin:/usr/bin
+WorkingDirectory=/opt/wger/powersync/app
+ExecStart=/opt/wger/powersync/node/bin/node \
+  /opt/wger/powersync/app/service/lib/entry.js \
+  start -r unified -c /etc/wger/powersync/powersync.yaml
+Restart=on-failure
+RestartSec=5
+PrivateTmp=true
+NoNewPrivileges=true
+# Sync API only from loopback; postinst may add IPAddressAllow for remote PG.
+IPAddressDeny=any
+IPAddressAllow=127.0.0.0/8
+IPAddressAllow=::1
+
+[Install]
+WantedBy=multi-user.target

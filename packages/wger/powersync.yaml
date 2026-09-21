@@ -1,0 +1,28 @@
+# PowerSync for wger. PS_* from /etc/wger/wger.env.
+telemetry:
+  disable_telemetry_sharing: true
+
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_DATABASE_URI
+      sslmode: !env PS_PG_SSLMODE
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_PG_URI
+  sslmode: !env PS_PG_SSLMODE
+
+port: !env PS_PORT
+
+api:
+  parameters:
+    max_parameter_query_results: 2000
+
+sync_rules:
+  path: /etc/wger/powersync/sync_rules.yaml
+
+client_auth:
+  allow_local_jwks: true
+  jwks_uri: !env PS_JWKS_URL
+  audience: ["powersync"]

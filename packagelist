@@ -10,3 +10,4 @@ wger:pkgbase
 wger:wger
 wger:wger-pgsql
 wger:wger-sqlite
+wger:wger-powersync

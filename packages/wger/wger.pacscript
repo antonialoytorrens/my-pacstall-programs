@@ -1,7 +1,7 @@
 pkgbase="wger"
-pkgname=("wger" "wger-pgsql" "wger-sqlite")
+pkgname=("wger" "wger-pgsql" "wger-sqlite" "wger-powersync")
 pkgver="2.7"
-pkgrel="2"
+pkgrel="3"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')
@@ -14,6 +14,7 @@ _wger_db_name="wger"
 _wger_db_user="wger"
 _wger_db_host="127.0.0.1"
 _wger_http_port="38437"
+_wger_powersync_port="38438"
 
 _src="wger-${pkgver}"
 _install_prefix="/opt/wger"
@@ -24,6 +25,11 @@ _python="python3"
 _lingua_rs_commit="77e94d1a2a8e49bed873a7c502bcb51ba803ef0f"
 _maturin_version="1.11.5"
 _psycopg_c_version="3.3.4"
+
+# PowerSync: Node + service. Runtime only on amd64/arm64.
+_node_version="24.18.1"
+_powersync_version="1.26.1"
+_pnpm_version="11.0.9"
 
 # Pacstall calls hooks with no args; dpkg argv is available at top-level when embedded.
 _DPKG_ARGV=("$@")
@@ -39,6 +45,12 @@ source=(
   "wger-celery-beat.service"
   "wger.tmpfiles"
   "pgsql.conf"
+  "powersync.yaml"
+  "sync_rules.yaml"
+  "postgresql-wger-powersync.conf"
+  "wger-powersync.service"
+  "wger-powersync-compact.service"
+  "wger-powersync-compact.timer"
 )
 
 makedepends+=(
@@ -130,6 +142,43 @@ build() {
     -exec rm -rf {} +
 
   find "${src_dest}" -depth -type d -name __pycache__ -exec rm -rf {} +
+
+  # PowerSync: Node + build service
+  local dpkg_arch node_arch
+  dpkg_arch="$(dpkg --print-architecture)"
+  case "${dpkg_arch}" in
+    amd64) node_arch="x64" ;;
+    arm64) node_arch="arm64" ;;
+    *) return 0 ;;
+  esac
+
+  local ps_node="${staging}${_install_prefix}/powersync/node"
+  local ps_app="${staging}${_install_prefix}/powersync/app"
+  mkdir -p "${ps_node}"
+  curl -fsSL \
+    "https://nodejs.org/dist/v${_node_version}/node-v${_node_version}-linux-${node_arch}.tar.xz" \
+    | tar -xJ -C "${ps_node}" --strip-components=1
+
+  local ps_src="${srcdir}/powersync-service-${_powersync_version}"
+  curl -fsSL \
+    "https://github.com/powersync-ja/powersync-service/archive/refs/tags/v${_powersync_version}.tar.gz" \
+    | tar -xz -C "${srcdir}"
+
+  (
+    export PATH="${ps_node}/bin:${PATH}"
+    cd "${ps_src}"
+    corepack enable
+    corepack prepare "pnpm@${_pnpm_version}" --activate
+    pnpm install --frozen-lockfile
+    pnpm build:production
+    shopt -s globstar nullglob
+    rm -rf node_modules **/node_modules
+    pnpm install --frozen-lockfile --prod --ignore-scripts
+  )
+
+  mkdir -p "${ps_app}"
+  cp -a "${ps_src}/." "${ps_app}/"
+  rm -rf "${ps_app}/.git" "${ps_app}/docs" "${ps_app}/test-client"
 }
 
 _render_in() {
@@ -139,6 +188,7 @@ _render_in() {
       -e "s|@WGER_DB_USER@|${_wger_db_user}|g" \
       -e "s|@WGER_DB_HOST@|${_wger_db_host}|g" \
       -e "s|@WGER_HTTP_PORT@|${_wger_http_port}|g" \
+      -e "s|@WGER_POWERSYNC_PORT@|${_wger_powersync_port}|g" \
       "${1}" > "${2}"
 }
 
@@ -156,7 +206,8 @@ package_wger() {
 
   local staging="${srcdir}/staging"
   mkdir -p "${pkgdir}${_install_prefix}"
-  cp -a "${staging}${_install_prefix}/." "${pkgdir}${_install_prefix}/"
+  cp -a "${staging}${_install_prefix}/src" "${pkgdir}${_install_prefix}/"
+  cp -a "${staging}${_install_prefix}/venv" "${pkgdir}${_install_prefix}/"
 
   mkdir -p "${pkgdir}/etc/wger"
   _render_in "${srcdir}/wger.env.in" \
@@ -210,6 +261,43 @@ package_wger-sqlite() {
   mkdir -p "${pkgdir}/DEBIAN"
   _render_in "${srcdir}/wger-sqlite.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
+}
+
+package_wger-powersync() {
+  depends=("wger" "wger-pgsql")
+  pkgdesc="wger PowerSync service (native Node, mobile offline sync)"
+  backup=('etc/wger/powersync/powersync.yaml' 'etc/wger/powersync/sync_rules.yaml')
+
+  # Node binary only for amd64/arm64; armhf gets stub so CI pkgname loop still works.
+  case "$(dpkg --print-architecture)" in
+    amd64|arm64) ;;
+    *)
+      mkdir -p "${pkgdir}/usr/share/doc/wger-powersync"
+      printf 'PowerSync not supported on this architecture.\n' \
+        > "${pkgdir}/usr/share/doc/wger-powersync/README"
+      return 0
+      ;;
+  esac
+
+  local staging="${srcdir}/staging"
+  mkdir -p "${pkgdir}${_install_prefix}/powersync"
+  cp -a "${staging}${_install_prefix}/powersync/." "${pkgdir}${_install_prefix}/powersync/"
+
+  mkdir -p "${pkgdir}/etc/wger/powersync"
+  install -Dm644 "${srcdir}/powersync.yaml" \
+    "${pkgdir}/etc/wger/powersync/powersync.yaml"
+  install -Dm644 "${srcdir}/sync_rules.yaml" \
+    "${pkgdir}/etc/wger/powersync/sync_rules.yaml"
+
+  install -Dm644 "${srcdir}/postgresql-wger-powersync.conf" \
+    "${pkgdir}/usr/share/wger/postgresql-wger-powersync.conf"
+
+  install -Dm644 "${srcdir}/wger-powersync.service" \
+    "${pkgdir}/usr/lib/systemd/system/wger-powersync.service"
+  install -Dm644 "${srcdir}/wger-powersync-compact.service" \
+    "${pkgdir}/usr/lib/systemd/system/wger-powersync-compact.service"
+  install -Dm644 "${srcdir}/wger-powersync-compact.timer" \
+    "${pkgdir}/usr/lib/systemd/system/wger-powersync-compact.timer"
 }
 
 _have_systemd() { [ -d /run/systemd/system ]; }
@@ -401,6 +489,101 @@ EOF
       db_stop
       _wger_restart
       ;;
+
+    wger-powersync)
+      if [ ! -d /opt/wger/powersync/app ]; then
+        fancy_message warn "PowerSync not supported on this architecture."
+      else
+      # shellcheck disable=SC1091
+      . /etc/dbconfig-common/wger-pgsql.conf
+
+      local db_host="${dbc_dbserver:-127.0.0.1}"
+      case "$db_host" in local|localhost) db_host="127.0.0.1" ;; esac
+      local db_name="${dbc_dbname}"
+      local db_port="${dbc_dbport:-5432}"
+      local sslmode=disable
+      case "$db_host" in
+        127.0.0.1|localhost|::1) ;;
+        *) sslmode=verify-full ;;
+      esac
+
+      # logical wal for sync
+      local confd
+      for confd in /etc/postgresql/*/main/conf.d; do
+        [ -d "$confd" ] || continue
+        install -m644 /usr/share/wger/postgresql-wger-powersync.conf \
+          "$confd/wger-powersync.conf"
+      done
+      fancy_message warn "Restart PostgreSQL so wal_level=logical takes effect."
+
+      local repl_pass storage_pass
+      if ! grep -q '^PS_DATABASE_URI=' "$env_file"; then
+        repl_pass=$(/opt/wger/venv/bin/python -c "import secrets; print(secrets.token_urlsafe(24))")
+        printf 'PS_DATABASE_URI=postgres://powersync_replication:%s@%s:%s/%s\n' \
+          "$repl_pass" "$db_host" "$db_port" "$db_name" >> "$env_file"
+      else
+        repl_pass=$(sed -n 's|^PS_DATABASE_URI=postgres://powersync_replication:\([^@]*\)@.*|\1|p' "$env_file")
+      fi
+
+      if ! grep -q '^PS_STORAGE_PG_URI=' "$env_file"; then
+        storage_pass=$(/opt/wger/venv/bin/python -c "import secrets; print(secrets.token_urlsafe(24))")
+        printf 'PS_STORAGE_PG_URI=postgres://powersync_storage:%s@%s:%s/%s\n' \
+          "$storage_pass" "$db_host" "$db_port" "$db_name" >> "$env_file"
+      else
+        storage_pass=$(sed -n 's|^PS_STORAGE_PG_URI=postgres://powersync_storage:\([^@]*\)@.*|\1|p' "$env_file")
+      fi
+
+      if ! grep -q '^PS_PORT=' "$env_file"; then
+        printf 'PS_PORT=%s\n' "${_wger_powersync_port}" >> "$env_file"
+      fi
+      if ! grep -q '^POWERSYNC_URL_PATH=' "$env_file"; then
+        printf 'POWERSYNC_URL_PATH=ps\n' >> "$env_file"
+      fi
+      if ! grep -q '^PS_JWKS_URL=' "$env_file"; then
+        local http_port
+        http_port=$(grep '^WGER_HTTP_PORT=' "$env_file" | cut -d= -f2-)
+        printf 'PS_JWKS_URL=http://127.0.0.1:%s/api/v2/powersync-keys\n' \
+          "${http_port:-${_wger_http_port}}" >> "$env_file"
+      fi
+      if ! grep -q '^PS_PG_SSLMODE=' "$env_file"; then
+        printf 'PS_PG_SSLMODE=%s\n' "$sslmode" >> "$env_file"
+      fi
+
+      chmod 640 "$env_file"
+      chown root:wger "$env_file"
+
+      # dedicated replication + storage roles (not the Django app role)
+      ensure_pg_role_db powersync_replication "$db_name" "$repl_pass"
+      ensure_pg_role_db powersync_storage "$db_name" "$storage_pass"
+      runuser -u postgres -- psql -d "$db_name" -v ON_ERROR_STOP=1 <<SQL
+ALTER ROLE powersync_replication WITH REPLICATION;
+GRANT CONNECT ON DATABASE ${db_name} TO powersync_replication;
+GRANT USAGE ON SCHEMA public TO powersync_replication;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO powersync_replication;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO powersync_replication;
+CREATE SCHEMA IF NOT EXISTS powersync AUTHORIZATION powersync_storage;
+GRANT CONNECT ON DATABASE ${db_name} TO powersync_storage;
+SQL
+
+      # allow outbound to remote PG (service unit already allows loopback)
+      case "$db_host" in
+        127.0.0.1|localhost|::1) ;;
+        *)
+          mkdir -p /etc/systemd/system/wger-powersync.service.d
+          printf '%s\n' '[Service]' "IPAddressAllow=${db_host}" \
+            > /etc/systemd/system/wger-powersync.service.d/remote-db.conf
+          ;;
+      esac
+
+      if _have_systemd; then
+        systemctl daemon-reload
+        systemctl enable wger-powersync.service
+        systemctl enable wger-powersync-compact.timer
+      fi
+
+      fancy_message warn "Proxy /ps/ to 127.0.0.1:${_wger_powersync_port} (no buffering, long timeouts). Then: systemctl start wger-powersync"
+      fi
+      ;;
   esac
 }
 
@@ -414,6 +597,12 @@ pre_remove() {
       if _have_systemd; then
         systemctl stop wger wger-celery-worker wger-celery-beat
         systemctl disable wger wger-celery-worker wger-celery-beat
+      fi
+      ;;
+    wger-powersync)
+      if _have_systemd; then
+        systemctl stop wger-powersync wger-powersync-compact.timer
+        systemctl disable wger-powersync wger-powersync-compact.timer
       fi
       ;;
     wger-pgsql)
@@ -436,6 +625,9 @@ post_remove() {
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
     wger)
+      _have_systemd && systemctl daemon-reload
+      ;;
+    wger-powersync)
       _have_systemd && systemctl daemon-reload
       ;;
     wger-pgsql)

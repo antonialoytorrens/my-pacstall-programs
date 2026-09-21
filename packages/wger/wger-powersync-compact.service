@@ -1,0 +1,15 @@
+[Unit]
+Description=wger PowerSync bucket compaction
+Requires=postgresql.service
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=wger
+Group=wger
+EnvironmentFile=/etc/wger/wger.env
+Environment=PATH=/opt/wger/powersync/node/bin:/usr/bin
+WorkingDirectory=/opt/wger/powersync/app
+ExecStart=/opt/wger/powersync/node/bin/node \
+  /opt/wger/powersync/app/service/lib/entry.js \
+  compact -c /etc/wger/powersync/powersync.yaml

@@ -1,7 +1,7 @@
 pkgbase="wger"
 pkgname=("wger" "wger-pgsql" "wger-sqlite" "wger-powersync")
 pkgver="2.7"
-pkgrel="4"
+pkgrel="5"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')
@@ -349,7 +349,7 @@ _wger_restart() {
   _have_systemd || return 0
   systemctl daemon-reload
   # Enable only — never start in postinst (installers/CI may lack a full runtime).
-  systemctl enable wger.service
+  systemctl enable wger.service wger-celery-worker.service wger-celery-beat.service
 }
 
 ensure_pg_role_db() {
@@ -414,8 +414,8 @@ print("JWT_PUBLIC_KEY=" + b64jwk(priv.public_key()))
       if _have_systemd; then
         systemd-tmpfiles --create /usr/lib/tmpfiles.d/wger.conf
         systemctl daemon-reload
-        # DB helpers start the service after bootstrap.
-        systemctl enable wger
+        # Enable only; DB helpers call _wger_restart after bootstrap.
+        systemctl enable wger wger-celery-worker wger-celery-beat
       fi
       ;;
 

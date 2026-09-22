@@ -1,6 +1,6 @@
 pkgname="seafile-server-community"
 pkgver="14.0.8"
-pkgrel="0"
+pkgrel="1"
 arch=('amd64' 'arm64')
 url="https://github.com/haiwen/seafile-server"
 license=('AGPL-3.0-or-later')

@@ -1,7 +1,7 @@
 pkgbase="wger"
 pkgname=("wger" "wger-pgsql" "wger-sqlite" "wger-powersync")
 pkgver="2.7"
-pkgrel="6"
+pkgrel="7"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')

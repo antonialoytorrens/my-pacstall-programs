@@ -108,7 +108,11 @@ jobs:
         run: |
           suffix="${{ matrix.deb_suffix }}"
           shopt -s nullglob
-          for f in ${{ matrix.package }}_*_${{ matrix.arch }}.deb ${{ matrix.package }}-*_*_all.deb; do
+          for f in \
+            ${{ matrix.package }}_*_${{ matrix.arch }}.deb \
+            ${{ matrix.package }}-*_*_${{ matrix.arch }}.deb \
+            ${{ matrix.package }}-*_*_all.deb
+          do
             [ -f "$f" ] || continue
             base="${f%.deb}"
             arch_part="${base##*_}"
@@ -133,12 +137,18 @@ jobs:
           test -f "${PKG}"
           dpkg-deb -I "${PKG}" >/dev/null
           ls -lh "${PKG}"
-          # Helper / split packages (Architecture: all), if any
+          # Helper / split packages (arch-specific and Architecture: all), if any
           shopt -s nullglob
           if [ "${{ matrix.multi_distro }}" = "true" ]; then
-            helpers=(${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_all.deb)
+            helpers=(
+              ${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_${{ matrix.arch }}.deb
+              ${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_all.deb
+            )
           else
-            helpers=(${{ matrix.package }}-*_*_all.deb)
+            helpers=(
+              ${{ matrix.package }}-*_*_${{ matrix.arch }}.deb
+              ${{ matrix.package }}-*_*_all.deb
+            )
           fi
           for h in "${helpers[@]:-}"; do
             [ -f "$h" ] || continue
@@ -157,6 +167,8 @@ jobs:
             path: |
               ${{ matrix.package }}_*_${{ matrix.arch }}.deb
               ${{ matrix.package }}_*~${{ matrix.deb_suffix }}_${{ matrix.arch }}.deb
+              ${{ matrix.package }}-*_*_${{ matrix.arch }}.deb
+              ${{ matrix.package }}-*_*~${{ matrix.deb_suffix }}_${{ matrix.arch }}.deb
 
       - uses: Wandalen/wretry.action@v3.8.0
         if: matrix.arch == 'amd64'

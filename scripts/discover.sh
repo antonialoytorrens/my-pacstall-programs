@@ -78,7 +78,7 @@ pkgrel_of() {
 
 expected_versioned_debs() {
   local pkg="$1"
-  local ver rel multi suffix arch dockerfile distro release
+  local ver rel multi suffix arch dockerfile distro release sub
   ver="$(pkgver_of "${pkg}")"
   rel="$(pkgrel_of "${pkg}")"
   multi=false
@@ -95,7 +95,24 @@ expected_versioned_debs() {
       else
         printf '%s\n' "${pkg}_${ver}-pacstall${rel}_${arch}.deb"
       fi
+      while IFS= read -r sub; do
+        [ -n "${sub}" ] || continue
+        if [ "${multi}" = true ]; then
+          printf '%s\n' "${sub}_${ver}-pacstall${rel}~${suffix}_${arch}.deb"
+        else
+          printf '%s\n' "${sub}_${ver}-pacstall${rel}_${arch}.deb"
+        fi
+      done < <(arch_specific_subpackages_of "${pkg}")
     done < <(arches_of "${pkg}")
+    # Architecture: all helpers — one .deb per distro (from amd64 build).
+    while IFS= read -r sub; do
+      [ -n "${sub}" ] || continue
+      if [ "${multi}" = true ]; then
+        printf '%s\n' "${sub}_${ver}-pacstall${rel}~${suffix}_all.deb"
+      else
+        printf '%s\n' "${sub}_${ver}-pacstall${rel}_all.deb"
+      fi
+    done < <(all_arch_subpackages_of "${pkg}")
   done < <(dockerfiles_of)
 }
 
@@ -222,6 +239,44 @@ pkgnames_of() {
     return 0
   fi
   printf '%s\n' "${pkg}"
+}
+
+# True when package_<name>() sets arch=('all') (Architecture: all helper).
+pkgname_is_all_arch() {
+  local pkg="$1" name="$2"
+  local ps
+  ps="$(pacscript_path "${pkg}")"
+  awk -v fn="package_${name}" '
+    $0 ~ "^" fn "\\(\\)" { infn = 1; next }
+    infn && /^[a-zA-Z_][a-zA-Z0-9_-]*\(/ { exit }
+    infn && /^[[:space:]]*arch=\(['\''"]all['\''"]\)/ { found = 1; exit }
+    END { exit found ? 0 : 1 }
+  ' "${ps}"
+}
+
+# Subpackages that inherit pkgbase arches (not Architecture: all).
+arch_specific_subpackages_of() {
+  local pkg="$1" name
+  while IFS= read -r name; do
+    [ -n "${name}" ] || continue
+    [ "${name}" = "${pkg}" ] && continue
+    if pkgname_is_all_arch "${pkg}" "${name}"; then
+      continue
+    fi
+    printf '%s\n' "${name}"
+  done < <(pkgnames_of "${pkg}")
+}
+
+# Subpackages with arch=('all') (uploaded once per distro from amd64).
+all_arch_subpackages_of() {
+  local pkg="$1" name
+  while IFS= read -r name; do
+    [ -n "${name}" ] || continue
+    [ "${name}" = "${pkg}" ] && continue
+    if pkgname_is_all_arch "${pkg}" "${name}"; then
+      printf '%s\n' "${name}"
+    fi
+  done < <(pkgnames_of "${pkg}")
 }
 
 # Print: dockerfile|distribution|release  (shared docker/, skip Dockerfile.in)
@@ -481,7 +536,7 @@ build_matrix_json() {
 
 publish_matrix_json() {
   local selected=("$@")
-  local pkg dockerfile distro release arch first=true multi suffix glob
+  local pkg dockerfile distro release arch first=true multi suffix glob sub
   local globs first_glob
   if [ "${#selected[@]}" -eq 0 ]; then
     mapfile -t selected < <(list_packages)
@@ -498,9 +553,9 @@ publish_matrix_json() {
     first_glob=true
     while IFS='|' read -r dockerfile distro release; do
       [ -n "${dockerfile}" ] || continue
+      suffix="$(deb_suffix_of "${distro}" "${release}")"
       while IFS= read -r arch; do
         [ -n "${arch}" ] || continue
-        suffix="$(deb_suffix_of "${distro}" "${release}")"
         if [ "${multi}" = true ]; then
           glob="${pkg}_*~${suffix}_${arch}.deb"
         else
@@ -512,7 +567,32 @@ publish_matrix_json() {
           globs+=","
         fi
         globs+="$(json_escape "${glob}")"
+        while IFS= read -r sub; do
+          [ -n "${sub}" ] || continue
+          if [ "${multi}" = true ]; then
+            glob="${sub}_*~${suffix}_${arch}.deb"
+          else
+            glob="${sub}_*_${arch}.deb"
+          fi
+          globs+=","
+          globs+="$(json_escape "${glob}")"
+        done < <(arch_specific_subpackages_of "${pkg}")
       done < <(arches_of "${pkg}")
+      # Architecture: all helpers — one glob per distro (amd64 artifact).
+      while IFS= read -r sub; do
+        [ -n "${sub}" ] || continue
+        if [ "${multi}" = true ]; then
+          glob="${sub}_*~${suffix}_all.deb"
+        else
+          glob="${sub}_*_all.deb"
+        fi
+        if [ "${first_glob}" = true ]; then
+          first_glob=false
+        else
+          globs+=","
+        fi
+        globs+="$(json_escape "${glob}")"
+      done < <(all_arch_subpackages_of "${pkg}")
     done < <(dockerfiles_of)
     globs+="]"
     if [ "${first}" = true ]; then

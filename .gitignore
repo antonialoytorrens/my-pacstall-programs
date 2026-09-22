@@ -1,4 +1,3 @@
 .cache/
 *.deb
-*.sha256
 .venv-requirements/

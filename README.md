@@ -40,7 +40,7 @@ Optional: add `name=<anitya_id>` to [`anitya.cfg`](anitya.cfg) when upstream is 
 
 Push to `master` (and `workflow_dispatch`) builds a package only when there is no published prerelease with all expected `.deb`s for the current `pkgver` + `pkgrel`. To rebuild, bump `pkgver` (up or down) or increase `pkgrel`. Tags look like `gatus-5.36.0-20260906120000`.
 
-Releases are created as drafts, assets are uploaded and checked (name + size), then the prerelease is published.
+Releases are created as drafts, `.deb` assets are uploaded, then the prerelease is published.
 
 Assets are tagged with distro version (not codename), e.g. `wger_2.7-pacstall2~debian13_amd64.deb`, `gatus_5.36.0-pacstall4~ubuntu26.04_amd64.deb`.
 

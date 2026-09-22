@@ -53,7 +53,7 @@ help:
 	@echo "Other targets:"
 	@echo "  packagelist / srclist - Regenerate from pacscripts"
 	@echo "  dockerfiles    - Render docker/Dockerfile* from Dockerfile.in"
-	@echo "  clean          - Remove built .deb / .sha256 artifacts"
+	@echo "  clean          - Remove built .deb artifacts"
 	@echo "  docker-build   - Build (or rebuild) the compose builder image"
 	@echo "  docker-shell   - Interactive shell in the builder container"
 	@echo "  docker-down    - Remove compose containers"
@@ -62,7 +62,7 @@ help:
 	@echo "   docker run --privileged --rm tonistiigi/binfmt --install all"
 
 clean:
-	rm -f ./*.deb ./*.sha256
+	rm -f ./*.deb
 
 packagelist:
 	$(DISCOVER) packagelist > packagelist

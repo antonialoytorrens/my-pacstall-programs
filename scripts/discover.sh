@@ -552,7 +552,9 @@ changed_packages() {
     force_all=true
   else
     changed="$(git -C "${ROOT}" diff --name-only "${base_sha}"...HEAD 2>/dev/null || true)"
-    if printf '%s\n' "${changed}" | grep -qE '^(Makefile|settings\.cfg|anitya\.cfg|packagelist|srclist|scripts/|docker/|\.github/workflows/build\.yml)'; then
+    # Only the build workflow itself forces rebuild-all. packagelist/srclist,
+    # Makefile, settings, scripts/, docker/, etc. must not (e.g. bb4cffc).
+    if printf '%s\n' "${changed}" | grep -qE '^\.github/workflows/build\.yml'; then
       force_all=true
     fi
   fi

@@ -29,15 +29,23 @@ COPY packagelist srclist /build/
 COPY packages/ /build/packages/
 
 # Split packages: build pkgbase first, install it, then helpers. Else one -I.
+# Helpers may Depend on sibling split debs (e.g. wger-powersync → wger-pgsql);
+# expose /build as a trusted file:// apt source and reindex before each helper
+# so pacstall's apt dependency check can see already-built local packages.
 RUN set -e \
   && ps="packages/${PACKAGE}/${PACKAGE}.pacscript" \
   && if grep -qE '^pkgname=\(' "${ps}"; then \
-       pacstall -BPNs -I "${ps}:${PACKAGE}" \
+       apt-get update -qq \
+       && apt-get install -y -qq --no-install-recommends dpkg-dev \
+       && echo 'deb [trusted=yes] file:/build ./' > /etc/apt/sources.list.d/local-build.list \
+       && pacstall -BPNs -I "${ps}:${PACKAGE}" \
        && apt-get install -y -qq --no-install-recommends ./${PACKAGE}_*.deb \
        && names="$(sed -nE 's/^pkgname=\((.*)\).*/\1/p' "${ps}" | head -n1 | tr -d "'\"")" \
        && for n in ${names}; do \
             [ "${n}" = "${PACKAGE}" ] && continue; \
-            pacstall -BPNs -I "${ps}:${n}"; \
+            dpkg-scanpackages -m . /dev/null > Packages \
+            && apt-get update -qq \
+            && pacstall -BPNs -I "${ps}:${n}"; \
           done; \
      else \
        pacstall -BPNs -I "${ps}"; \

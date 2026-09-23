@@ -5,7 +5,8 @@ telemetry:
 replication:
   connections:
     - type: postgresql
-      uri: !env PS_DATABASE_URI
+      # Not PS_DATABASE_URI: wger Django treats that as the app DB (overrides DJANGO_DB_*).
+      uri: !env PS_REPLICATION_PG_URI
       sslmode: !env PS_PG_SSLMODE
 
 storage:

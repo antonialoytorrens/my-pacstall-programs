@@ -1,7 +1,7 @@
 pkgbase="wger"
 pkgname=("wger" "wger-pgsql" "wger-sqlite" "wger-powersync")
 pkgver="2.7"
-pkgrel="8"
+pkgrel="9"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')
@@ -504,12 +504,13 @@ EOF
       fancy_message warn "Restart PostgreSQL so wal_level=logical takes effect."
 
       local repl_pass storage_pass
-      if ! grep -q '^PS_DATABASE_URI=' "$env_file"; then
+      # Not PS_DATABASE_URI: wger Django treats that as the app DB (overrides DJANGO_DB_*).
+      if ! grep -q '^PS_REPLICATION_PG_URI=' "$env_file"; then
         repl_pass=$(/opt/wger/venv/bin/python -c "import secrets; print(secrets.token_urlsafe(24))")
-        printf 'PS_DATABASE_URI=postgres://powersync_replication:%s@%s:%s/%s\n' \
+        printf 'PS_REPLICATION_PG_URI=postgres://powersync_replication:%s@%s:%s/%s\n' \
           "$repl_pass" "$db_host" "$db_port" "$db_name" >> "$env_file"
       else
-        repl_pass=$(sed -n 's|^PS_DATABASE_URI=postgres://powersync_replication:\([^@]*\)@.*|\1|p' "$env_file")
+        repl_pass=$(sed -n 's|^PS_REPLICATION_PG_URI=postgres://powersync_replication:\([^@]*\)@.*|\1|p' "$env_file")
       fi
 
       if ! grep -q '^PS_STORAGE_PG_URI=' "$env_file"; then

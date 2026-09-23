@@ -78,7 +78,7 @@ pkgrel_of() {
 
 expected_versioned_debs() {
   local pkg="$1"
-  local ver rel multi suffix arch dockerfile distro release sub
+  local ver rel multi suffix arch dockerfile distro release sub sub_arch
   ver="$(pkgver_of "${pkg}")"
   rel="$(pkgrel_of "${pkg}")"
   multi=false
@@ -97,11 +97,15 @@ expected_versioned_debs() {
       fi
       while IFS= read -r sub; do
         [ -n "${sub}" ] || continue
-        if [ "${multi}" = true ]; then
-          printf '%s\n' "${sub}_${ver}-pacstall${rel}~${suffix}_${arch}.deb"
-        else
-          printf '%s\n' "${sub}_${ver}-pacstall${rel}_${arch}.deb"
-        fi
+        # Only expect this subpackage for arches it declares (or inherits).
+        while IFS= read -r sub_arch; do
+          [ "${sub_arch}" = "${arch}" ] || continue
+          if [ "${multi}" = true ]; then
+            printf '%s\n' "${sub}_${ver}-pacstall${rel}~${suffix}_${arch}.deb"
+          else
+            printf '%s\n' "${sub}_${ver}-pacstall${rel}_${arch}.deb"
+          fi
+        done < <(pkgname_arches_of "${pkg}" "${sub}")
       done < <(arch_specific_subpackages_of "${pkg}")
     done < <(arches_of "${pkg}")
     # Architecture: all helpers — one .deb per distro (from amd64 build).
@@ -244,17 +248,46 @@ pkgnames_of() {
 # True when package_<name>() sets arch=('all') (Architecture: all helper).
 pkgname_is_all_arch() {
   local pkg="$1" name="$2"
+  local line
+  line="$(pkgname_arch_line_of "${pkg}" "${name}")"
+  [ "${line}" = "all" ]
+}
+
+# Print arch tokens from package_<name>() arch=(...), or empty if unset.
+pkgname_arch_line_of() {
+  local pkg="$1" name="$2"
   local ps
   ps="$(pacscript_path "${pkg}")"
   awk -v fn="package_${name}" '
     $0 ~ "^" fn "\\(\\)" { infn = 1; next }
     infn && /^[a-zA-Z_][a-zA-Z0-9_-]*\(/ { exit }
-    infn && /^[[:space:]]*arch=\(['\''"]all['\''"]\)/ { found = 1; exit }
-    END { exit found ? 0 : 1 }
+    infn && /^[[:space:]]*arch=\(/ {
+      line = $0
+      sub(/^[[:space:]]*arch=\(/, "", line)
+      sub(/\).*/, "", line)
+      gsub(/['\''"]/, "", line)
+      print line
+      exit
+    }
   ' "${ps}"
 }
 
-# Subpackages that inherit pkgbase arches (not Architecture: all).
+# Architectures for a split subpackage: override arch= if set, else pkgbase.
+# Prints one arch per line. For arch=('all') prints a single "all".
+pkgname_arches_of() {
+  local pkg="$1" name="$2"
+  local line a
+  line="$(pkgname_arch_line_of "${pkg}" "${name}")"
+  if [ -z "${line}" ]; then
+    arches_of "${pkg}"
+    return 0
+  fi
+  for a in ${line}; do
+    printf '%s\n' "${a}"
+  done
+}
+
+# Subpackages that are not Architecture: all (may still restrict arches).
 arch_specific_subpackages_of() {
   local pkg="$1" name
   while IFS= read -r name; do
@@ -537,7 +570,7 @@ build_matrix_json() {
 publish_matrix_json() {
   local selected=("$@")
   local pkg dockerfile distro release arch first=true multi suffix glob sub
-  local globs first_glob
+  local globs first_glob want sub_arch
   if [ "${#selected[@]}" -eq 0 ]; then
     mapfile -t selected < <(list_packages)
   fi
@@ -569,6 +602,15 @@ publish_matrix_json() {
         globs+="$(json_escape "${glob}")"
         while IFS= read -r sub; do
           [ -n "${sub}" ] || continue
+          # Only expect this subpackage for arches it declares (or inherits).
+          want=false
+          while IFS= read -r sub_arch; do
+            if [ "${sub_arch}" = "${arch}" ]; then
+              want=true
+              break
+            fi
+          done < <(pkgname_arches_of "${pkg}" "${sub}")
+          [ "${want}" = true ] || continue
           if [ "${multi}" = true ]; then
             glob="${sub}_*~${suffix}_${arch}.deb"
           else

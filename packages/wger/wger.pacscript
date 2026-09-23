@@ -1,7 +1,7 @@
 pkgbase="wger"
 pkgname=("wger" "wger-pgsql" "wger-sqlite" "wger-powersync")
 pkgver="2.7"
-pkgrel="7"
+pkgrel="8"
 arch=('amd64' 'arm64' 'armhf')
 url="https://wger.de/"
 license=('AGPL-3.0-or-later')
@@ -264,20 +264,10 @@ package_wger-sqlite() {
 }
 
 package_wger-powersync() {
+  arch=('amd64' 'arm64')
   depends=("wger" "wger-pgsql")
   pkgdesc="wger PowerSync service (native Node, mobile offline sync)"
   backup=('etc/wger/powersync/powersync.yaml' 'etc/wger/powersync/sync_rules.yaml')
-
-  # Node binary only for amd64/arm64; armhf gets stub so CI pkgname loop still works.
-  case "$(dpkg --print-architecture)" in
-    amd64|arm64) ;;
-    *)
-      mkdir -p "${pkgdir}/usr/share/doc/wger-powersync"
-      printf 'PowerSync not supported on this architecture.\n' \
-        > "${pkgdir}/usr/share/doc/wger-powersync/README"
-      return 0
-      ;;
-  esac
 
   local staging="${srcdir}/staging"
   mkdir -p "${pkgdir}${_install_prefix}/powersync"
@@ -491,9 +481,6 @@ EOF
       ;;
 
     wger-powersync)
-      if [ ! -d /opt/wger/powersync/app ]; then
-        fancy_message warn "PowerSync not supported on this architecture."
-      else
       # shellcheck disable=SC1091
       . /etc/dbconfig-common/wger-pgsql.conf
 
@@ -582,7 +569,6 @@ SQL
       fi
 
       fancy_message warn "Proxy /ps/ to 127.0.0.1:${_wger_powersync_port} (no buffering, long timeouts). Then: systemctl start wger-powersync"
-      fi
       ;;
   esac
 }

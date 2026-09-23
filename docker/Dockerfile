@@ -48,6 +48,8 @@ COPY packages/ /build/packages/
 # Helpers may Depend on sibling split debs (e.g. wger-powersync → wger-pgsql);
 # expose /build as a trusted file:// apt source and reindex before each helper
 # so pacstall's apt dependency check can see already-built local packages.
+# Skip a helper when package_<name> sets arch=(...) and current dpkg arch is
+# not listed (unless all/any); e.g. wger-powersync is amd64/arm64 only.
 RUN set -e \
   && ps="packages/${PACKAGE}/${PACKAGE}.pacscript" \
   && if grep -qE '^pkgname=\(' "${ps}"; then \
@@ -57,9 +59,25 @@ RUN set -e \
        && pacstall -BPNs -I "${ps}:${PACKAGE}" \
        && apt-get install -y -qq --no-install-recommends ./${PACKAGE}_*.deb \
        && names="$(sed -nE 's/^pkgname=\((.*)\).*/\1/p' "${ps}" | head -n1 | tr -d "'\"")" \
+       && cur="$(dpkg --print-architecture)" \
        && for n in ${names}; do \
             [ "${n}" = "${PACKAGE}" ] && continue; \
-            dpkg-scanpackages -m . /dev/null > Packages \
+            sub_arch="$(awk -v fn="package_${n}" ' \
+              $0 ~ "^" fn "\\(\\)" { infn = 1; next } \
+              infn && /^[a-zA-Z_][a-zA-Z0-9_-]*\(/ { exit } \
+              infn && /^[[:space:]]*arch=\(/ { \
+                line = $0; sub(/^[[:space:]]*arch=\(/, "", line); sub(/\).*/, "", line); \
+                gsub(/['\''"]/, "", line); print line; exit \
+              } \
+            ' "${ps}")" \
+            && if [ -n "${sub_arch}" ]; then \
+                 case " ${sub_arch} " in \
+                   *" all "*|*" any "*) ;; \
+                   *" ${cur} "*) ;; \
+                   *) echo "skip ${n}: arch=(${sub_arch}) excludes ${cur}"; continue ;; \
+                 esac; \
+               fi \
+            && dpkg-scanpackages -m . /dev/null > Packages \
             && apt-get update -qq \
             && pacstall -BPNs -I "${ps}:${n}"; \
           done; \

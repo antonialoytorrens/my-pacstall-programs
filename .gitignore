@@ -1,3 +1,4 @@
 .cache/
 *.deb
 .venv-requirements/
+.env

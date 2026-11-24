@@ -6,22 +6,22 @@ authors = ["David Burke"]
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-    "django>=6.0,<6.1",
-    "django-vtasks[valkey]~=3.1.0",
-    "django-allauth-async[mfa,socialaccount]==65.16.1.7",
+    "django>=6.1,<6.2",
+    "django-vtasks[valkey]~=3.2.0",
+    "django-allauth-async[mfa,socialaccount]==65.19.1.1",
     "django-cors-headers~=4.0",
     "django-environ~=0.11",
     "django-extensions~=4.0",
     "django-organizations~=2.7",
-    "whitenoise~=6.0",
     "sentry-sdk~=2.20",
-    "cxxfilt~=0.3.0",
     "django-anymail~=15.0",
     "user-agents~=2.1",
-    "django-ipware~=7.0",
+    "django-ipware~=8.0",
     "anonymizeip~=1.0",
-    "symbolic~=13.9.0",
-    "aiohttp~=3.7",
+    "aiohttp~=3.14",
+    # Resolves to 2.4.0, not the newer 2.5.0: that release caps Django below
+    # 6.1. 2.4.0 declares no Django constraint at all, so it will not fail
+    # loudly on a future Django bump — re-check it whenever Django moves.
     "django-prometheus~=2.2",
     "django-import-export~=4.1",
     # Library-only: psycopg.sql composition and Jsonb/Json parameter
@@ -35,12 +35,13 @@ dependencies = [
     "django-postgres-partition>=0.1.4",
     "pyyaml>=6.0.2", # allauth openapi spec
     "granian[uvloop]>=2.6.0",
-    "django-vcache>=3.0.0",
-    "glitchtip-rust>=0.9.0",
+    "servestatic[brotli]>=4.3",
+    "django-vcache>=3.2.0",
+    "glitchtip-rust>=0.11.0",
     "uuid6>=2024.1.12",
     "minidump>=0.0.24",
     # Matches Django major/minor
-    "django-async-backend>=6.0,<6.1",
+    "django-async-backend>=6.1,<6.2",
     "opentelemetry-proto~=1.0",
 ]
 
@@ -59,10 +60,13 @@ dev = [
     {include-group = "lint"},
     "freezegun~=1.1",
     "model-bakery-async~=1.23",
-    "django-debug-toolbar~=7.0",
+    "django-debug-toolbar~=8.0",
     "django-stubs[compatible-mypy]~=6.0",
     "django-sslserver~=0.22",
-    "aioresponses~=0.7",
+    # The benchmark harness's HTTP client. Declared rather than relied on
+    # transitively (it reaches us via the MCP SDK) so a future SDK change
+    # cannot silently take it away, as the move off httpx already did once.
+    "httpx2~=2.12",
     "memray~=1.9",
     "tblib~=3.0",                         # Needed for test --parallel
     "ipython>=8.32.0",

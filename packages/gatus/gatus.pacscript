@@ -1,7 +1,7 @@
 pkgbase="gatus"
 pkgname=("gatus" "gatus-pgsql" "gatus-sqlite")
-pkgver="5.36.0"
-pkgrel="4"
+pkgver="5.38.0"
+pkgrel="1"
 arch=('amd64' 'arm64' 'armhf')
 url="https://gatus.io/"
 license=('Apache-2.0')

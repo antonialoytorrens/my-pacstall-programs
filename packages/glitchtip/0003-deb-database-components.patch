@@ -1,6 +1,6 @@
 --- a/glitchtip/settings.py
 +++ b/glitchtip/settings.py
-@@ -877,12 +877,17 @@
+@@ -947,11 +947,13 @@
  
  # Database
  # https://docs.djangoproject.com/en/dev/ref/settings/#databases
@@ -16,27 +16,36 @@
 +        "PASSWORD": env.str("DATABASE_PASSWORD", ""),
 +    }
  }
-+if env.str("DATABASE_HOST", None):
-+    DATABASES["default"]["HOST"] = env.str("DATABASE_HOST")
-+    DATABASES["default"]["PORT"] = env.str("DATABASE_PORT", "5432")
  if env("READ_ONLY_DATABASE_URL"):
      DATABASES["read_only"] = env.db("READ_ONLY_DATABASE_URL")
- if env("MAINTENANCE_DATABASE_URL"):
-@@ -890,17 +895,6 @@
+@@ -960,28 +962,9 @@
  
  MAINTENANCE_DATABASE_ALIAS = "maintenance" if "maintenance" in DATABASES else "default"
  
 -# If component variables like DATABASE_HOST are provided, update the base config
--if env.str("DATABASE_HOST", None):
+ if env.str("DATABASE_HOST", None):
 -    DATABASES["default"].update(
 -        {
 -            "NAME": env.str("DATABASE_NAME", "postgres"),
 -            "USER": env.str("DATABASE_USER", "postgres"),
--            "PASSWORD": env.str("DATABASE_PASSWORD"),
+-            # Not required when IAM auth covers THIS alias, where there is
+-            # no password to supply. Gated on alias membership, not on
+-            # DATABASE_IAM_AUTH alone: enabling IAM for some other alias must
+-            # not quietly turn a mandatory password into an empty one here,
+-            # which against a trust/peer-configured server would connect
+-            # unauthenticated.
+-            "PASSWORD": env.str(
+-                "DATABASE_PASSWORD",
+-                ""
+-                if (DATABASE_IAM_AUTH and "default" in DATABASE_IAM_AUTH_ALIASES)
+-                else environ.Env.NOTSET,
+-            ),
 -            "HOST": env.str("DATABASE_HOST"),
 -            "PORT": env.str("DATABASE_PORT", "5432"),
 -        }
 -    )
++    DATABASES["default"]["HOST"] = env.str("DATABASE_HOST")
++    DATABASES["default"]["PORT"] = env.str("DATABASE_PORT", "5432")
  # Database engine. gt_rust.django_backend is the only supported engine: the
  # ORM (sync + async) runs on the Rust Postgres driver — one shared tokio pool
  # on the same runtime as the valkey driver. psycopg remains installed as a

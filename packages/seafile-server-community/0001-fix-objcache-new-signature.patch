@@ -1,6 +1,6 @@
 Description: fix objcache_new() conflicting-types build failure
  Old-style empty-parens declaration vs. an unused-param definition trips
- modern GCC's conflicting-types check; drop the unused parameter.
+ modern GCC's conflicting-types check; use (void) consistently.
 Forwarded: not-needed
 --- a/common/obj-cache.c
 +++ b/common/obj-cache.c
@@ -8,7 +8,7 @@ Forwarded: not-needed
  }
  
  ObjCache *
--objcache_new (GKeyFile *config)
+-objcache_new ()
 +objcache_new (void)
  {
      ObjCache *cache = NULL;

@@ -1,6 +1,6 @@
 pkgname="glitchtip"
-pkgver="6.2.6"
-pkgrel="8"
+pkgver="7.0.0"
+pkgrel="1"
 arch=('amd64')
 url="https://glitchtip.com/"
 license=('MIT')

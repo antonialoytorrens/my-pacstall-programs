@@ -1,5 +1,5 @@
 pkgname="seafile-server-community"
-pkgver="14.0.8"
+pkgver="14.0.9"
 pkgrel="1"
 arch=('amd64' 'arm64')
 url="https://github.com/haiwen/seafile-server"

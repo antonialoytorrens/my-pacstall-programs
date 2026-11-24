@@ -1,6 +1,6 @@
 pkgname="fail2ban-ui"
-pkgver="1.5.4"
-pkgrel="3"
+pkgver="1.6.2"
+pkgrel="1"
 arch=('amd64' 'arm64' 'armhf')
 url="https://github.com/swissmakers/fail2ban-ui"
 license=('AGPL-3.0')

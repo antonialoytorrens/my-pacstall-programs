@@ -1,6 +1,6 @@
 --- a/glitchtip/settings.py
 +++ b/glitchtip/settings.py
-@@ -646,7 +646,6 @@
+@@ -682,7 +682,6 @@
  if DEBUG_TOOLBAR:
      INSTALLED_APPS.append("debug_toolbar")
  INSTALLED_APPS += [
@@ -8,7 +8,7 @@
      "django_vtasks",
      "glitchtip",
      "apps.alerts",
-@@ -726,7 +725,10 @@
+@@ -773,7 +772,10 @@
  TEMPLATES = [
      {
          "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -20,9 +20,9 @@
          "APP_DIRS": True,
          "OPTIONS": {
              "context_processors": [
-@@ -1154,17 +1156,18 @@
- GS_PROJECT_ID = env("GS_PROJECT_ID")
+@@ -1374,21 +1376,18 @@
  
+     AWS_S3_TRANSFER_CONFIG = TransferConfig(use_threads=False)
  if AWS_S3_ENDPOINT_URL:
 -    MEDIA_URL = env.str("MEDIA_URL", f"https://{AWS_S3_ENDPOINT_URL}/{AWS_LOCATION}/")
 -    STORAGES["default"] = {"BACKEND": "storages.backends.s3boto3.S3Boto3Storage"}
@@ -37,6 +37,10 @@
  
  STATICFILES_DIRS = [
 -    "assets",
+-    # The frontend build, source maps included. Publishing them is deliberate:
+-    # GlitchTip is open source, and a readable stack trace is worth more than
+-    # the bytes -- which are few, since they compress well and are only fetched
+-    # with devtools open. Do not strip them to save space.
 -    "dist",
 +    os.path.join(BASE_DIR, "assets"),
 +    os.path.join(BASE_DIR, "dist"),
@@ -44,5 +48,5 @@
 -STATIC_ROOT = path("static/")
 +STATIC_ROOT = env.str("STATIC_ROOT", "/var/lib/glitchtip/static")
  
- EMAIL_BACKEND = env.str(
-     "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
+ # collectstatic writes a compressed copy beside every compressible file, once
+ # per image build. ServeStatic then serves the smallest one the client accepts.

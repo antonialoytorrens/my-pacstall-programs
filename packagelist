@@ -10,7 +10,6 @@ traccar:traccar
 traccar:traccar-web
 traccar:traccar-pgsql
 traccar:traccar-mysql
-trivy
 weblate
 wger:pkgbase
 wger:wger

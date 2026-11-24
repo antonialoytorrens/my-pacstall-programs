@@ -1,0 +1,22 @@
+[Unit]
+Description=Traccar GPS tracking server
+Documentation=https://www.traccar.org/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=traccar
+Group=traccar
+WorkingDirectory=/opt/traccar
+ExecStart=/usr/bin/java -XX:+ExitOnOutOfMemoryError -jar /opt/traccar/tracker-server.jar /etc/traccar/traccar.xml
+SyslogIdentifier=traccar
+SuccessExitStatus=143
+WatchdogSec=600
+Restart=on-failure
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

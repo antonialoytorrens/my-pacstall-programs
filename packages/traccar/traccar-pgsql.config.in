@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+. /usr/share/debconf/confmodule
+dbc_dbname="@TRACCAR_DB_NAME@"
+dbc_dbuser="@TRACCAR_DB_USER@"
+. /usr/share/dbconfig-common/dpkg/config.pgsql
+dbc_go traccar-pgsql "$@"

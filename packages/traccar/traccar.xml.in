@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<properties>
+
+    <!-- Documentation: https://www.traccar.org/configuration-file/ -->
+    <!-- H2 is a CI / dbconfig-no-thanks fallback only — use traccar-pgsql or traccar-mysql in production. -->
+
+    <entry key='web.path'>@TRACCAR_WEB_PATH@</entry>
+    <entry key='web.localizationPath'>@TRACCAR_LOCALIZATION_PATH@</entry>
+
+    <entry key='media.path'>@TRACCAR_MEDIA_PATH@</entry>
+    <entry key='logger.file'>@TRACCAR_LOG_FILE@</entry>
+
+    <entry key='database.driver'>org.h2.Driver</entry>
+    <entry key='database.url'>jdbc:h2:@TRACCAR_DATA_PATH@/database</entry>
+    <entry key='database.user'>sa</entry>
+    <entry key='database.password'></entry>
+
+</properties>

@@ -5,6 +5,12 @@ gatus:gatus-pgsql
 gatus:gatus-sqlite
 glitchtip
 seafile-server-community
+traccar:pkgbase
+traccar:traccar
+traccar:traccar-web
+traccar:traccar-pgsql
+traccar:traccar-mysql
+trivy
 weblate
 wger:pkgbase
 wger:wger

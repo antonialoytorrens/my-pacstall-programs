@@ -6,6 +6,7 @@
     <!-- H2 is a CI / dbconfig-no-thanks fallback only — use traccar-pgsql or traccar-mysql in production. -->
 
     <entry key='web.path'>@TRACCAR_WEB_PATH@</entry>
+    <entry key='web.override'>@TRACCAR_OVERRIDE_PATH@</entry>
     <entry key='web.localizationPath'>@TRACCAR_LOCALIZATION_PATH@</entry>
 
     <entry key='media.path'>@TRACCAR_MEDIA_PATH@</entry>

@@ -1,7 +1,7 @@
 pkgbase="traccar"
 pkgname=("traccar" "traccar-web" "traccar-pgsql" "traccar-mysql")
 pkgver="6.17.0"
-pkgrel="1"
+pkgrel="2"
 arch=('amd64' 'arm64')
 url="https://www.traccar.org/"
 license=('Apache-2.0')
@@ -15,6 +15,7 @@ _traccar_web_path="/usr/share/traccar-web"
 _traccar_localization_path="/opt/traccar/templates/translations"
 _traccar_data_path="/var/lib/traccar/data"
 _traccar_media_path="/var/lib/traccar/media"
+_traccar_override_path="/var/lib/traccar/override"
 _traccar_log_file="/var/lib/traccar/logs/tracker-server.log"
 _install_prefix="/opt/traccar"
 
@@ -43,6 +44,7 @@ _render_in() {
       -e "s|@TRACCAR_LOCALIZATION_PATH@|${_traccar_localization_path}|g" \
       -e "s|@TRACCAR_DATA_PATH@|${_traccar_data_path}|g" \
       -e "s|@TRACCAR_MEDIA_PATH@|${_traccar_media_path}|g" \
+      -e "s|@TRACCAR_OVERRIDE_PATH@|${_traccar_override_path}|g" \
       -e "s|@TRACCAR_LOG_FILE@|${_traccar_log_file}|g" \
       "${1}" > "${2}"
 }
@@ -118,7 +120,8 @@ package_traccar() {
   mkdir -p \
     "${pkgdir}/var/lib/traccar/data" \
     "${pkgdir}/var/lib/traccar/logs" \
-    "${pkgdir}/var/lib/traccar/media"
+    "${pkgdir}/var/lib/traccar/media" \
+    "${pkgdir}/var/lib/traccar/override"
 }
 
 package_traccar-web() {
@@ -186,9 +189,11 @@ _traccar_ensure_user() {
     useradd --system --gid traccar --home-dir /var/lib/traccar \
       --shell /usr/sbin/nologin traccar
   fi
-  mkdir -p /var/lib/traccar/data /var/lib/traccar/logs /var/lib/traccar/media /etc/traccar
+  mkdir -p /var/lib/traccar/data /var/lib/traccar/logs /var/lib/traccar/media \
+    /var/lib/traccar/override /etc/traccar
   chown -R traccar:traccar /var/lib/traccar
-  chmod 750 /var/lib/traccar /var/lib/traccar/data /var/lib/traccar/logs /var/lib/traccar/media
+  chmod 750 /var/lib/traccar /var/lib/traccar/data /var/lib/traccar/logs \
+    /var/lib/traccar/media /var/lib/traccar/override
   chown root:traccar /etc/traccar
   chmod 750 /etc/traccar
   if [ -f /etc/traccar/traccar.xml ]; then
@@ -219,12 +224,6 @@ _traccar_set_xml_entry() {
   rm -f "${tmp}"
 }
 
-_traccar_restart() {
-  _have_systemd || return 0
-  systemctl daemon-reload
-  systemctl try-restart traccar.service
-}
-
 ensure_pg_role_db() {
   local role="$1" dbname="$2" pass="${3:-}"
   if [ -n "$pass" ]; then
@@ -252,7 +251,6 @@ post_install() {
       _traccar_ensure_user
       if _have_systemd; then
         systemctl daemon-reload
-        systemctl enable --now traccar.service
       fi
       ;;
 
@@ -297,7 +295,6 @@ post_install() {
       chown root:traccar "${xml}"
       chmod 640 "${xml}"
       db_stop
-      _traccar_restart
       ;;
 
     traccar-mysql)
@@ -326,7 +323,6 @@ post_install() {
       chown root:traccar "${xml}"
       chmod 640 "${xml}"
       db_stop
-      _traccar_restart
       ;;
   esac
 }

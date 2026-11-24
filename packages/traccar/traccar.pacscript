@@ -1,7 +1,7 @@
 pkgbase="traccar"
 pkgname=("traccar" "traccar-web" "traccar-pgsql" "traccar-mysql")
 pkgver="6.17.0"
-pkgrel="2"
+pkgrel="3"
 arch=('amd64' 'arm64')
 url="https://www.traccar.org/"
 license=('Apache-2.0')
@@ -49,35 +49,12 @@ _render_in() {
       "${1}" > "${2}"
 }
 
-_other_root() {
-  # Pacstall may leave the release zip contents at srcdir or under a subdir.
-  if [ -d "${srcdir}/web" ]; then
-    echo "${srcdir}"
-  elif [ -d "${srcdir}/traccar-other-${pkgver}/web" ]; then
-    echo "${srcdir}/traccar-other-${pkgver}"
-  else
-    local found
-    found="$(find "${srcdir}" -maxdepth 3 -type d -name web 2>/dev/null | head -n1)"
-    if [ -n "${found}" ]; then
-      dirname "${found}"
-    else
-      echo "ERROR: bundled traccar web/ not found under ${srcdir}" >&2
-      return 1
-    fi
-  fi
-}
-
 build() {
   set -e
   cd "${srcdir}/traccar-${pkgver}"
-  export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-$(dpkg --print-architecture)}"
-  if [ ! -x "${JAVA_HOME}/bin/java" ]; then
-    JAVA_HOME="$(dirname "$(dirname "$(readlink -f /usr/bin/javac)")")"
-  fi
+  export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-$(dpkg --print-architecture)"
   export PATH="${JAVA_HOME}/bin:${PATH}"
   ./gradlew assemble --no-daemon
-  test -f target/tracker-server.jar
-  test -d target/lib
 }
 
 package_traccar() {
@@ -90,8 +67,6 @@ package_traccar() {
   pkgdesc="Traccar GPS tracking server (native systemd; use traccar-pgsql or traccar-mysql in production)"
 
   local src="${srcdir}/traccar-${pkgver}"
-  local other
-  other="$(_other_root)"
 
   install -Dm644 "${src}/target/tracker-server.jar" \
     "${pkgdir}${_install_prefix}/tracker-server.jar"
@@ -104,11 +79,9 @@ package_traccar() {
 
   mkdir -p "${pkgdir}${_install_prefix}/templates"
   cp -a "${src}/templates/." "${pkgdir}${_install_prefix}/templates/"
-  if [ -d "${other}/templates/translations" ]; then
-    mkdir -p "${pkgdir}${_install_prefix}/templates/translations"
-    cp -a "${other}/templates/translations/." \
-      "${pkgdir}${_install_prefix}/templates/translations/"
-  fi
+  mkdir -p "${pkgdir}${_install_prefix}/templates/translations"
+  cp -a "${srcdir}/templates/translations/." \
+    "${pkgdir}${_install_prefix}/templates/translations/"
 
   mkdir -p "${pkgdir}/etc/traccar"
   _render_in "${srcdir}/traccar.xml.in" \
@@ -129,11 +102,8 @@ package_traccar-web() {
   pkgdesc="Traccar web UI (prebuilt assets from upstream server release)"
   depends=()
 
-  local other
-  other="$(_other_root)"
   mkdir -p "${pkgdir}${_traccar_web_path}"
-  cp -a "${other}/web/." "${pkgdir}${_traccar_web_path}/"
-  test -f "${pkgdir}${_traccar_web_path}/index.html"
+  cp -a "${srcdir}/web/." "${pkgdir}${_traccar_web_path}/"
 }
 
 package_traccar-pgsql() {
@@ -178,8 +148,6 @@ package_traccar-mysql() {
   _render_in "${srcdir}/traccar-mysql.config.in" "${pkgdir}/DEBIAN/config"
   chmod 755 "${pkgdir}/DEBIAN/config"
 }
-
-_have_systemd() { [ -d /run/systemd/system ]; }
 
 _traccar_ensure_user() {
   if ! getent group traccar >/dev/null; then
@@ -249,9 +217,6 @@ post_install() {
   case "${pkg}" in
     traccar)
       _traccar_ensure_user
-      if _have_systemd; then
-        systemctl daemon-reload
-      fi
       ;;
 
     traccar-pgsql)
@@ -333,12 +298,6 @@ pre_remove() {
 
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
-    traccar)
-      if _have_systemd; then
-        systemctl stop traccar.service || true
-        systemctl disable traccar.service || true
-      fi
-      ;;
     traccar-pgsql)
       . /usr/share/debconf/confmodule
       . /usr/share/dbconfig-common/dpkg/prerm.pgsql
@@ -358,9 +317,6 @@ post_remove() {
 
   local pkg="${DPKG_MAINTSCRIPT_PACKAGE:-}"
   case "${pkg}" in
-    traccar)
-      _have_systemd && systemctl daemon-reload || true
-      ;;
     traccar-pgsql)
       . /usr/share/debconf/confmodule
       . /usr/share/dbconfig-common/dpkg/postrm.pgsql
